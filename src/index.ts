@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { z as zod } from 'zod'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { BlockAssembler, isAgentLoopRequest } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -70,10 +71,10 @@ interface Operation {
  * @param config - validated configuration.
  */
 export function apply(ctx: Context, config: Config): void {
-  const localeSettings = z.object({ preference: z.string().required(false) })
+  const localeSettings = zod.object({ preference: zod.string().optional() })
   const outputLocale = () => {
     const descriptor = ctx.get('settings')?.describe().find(form => form.ns === LOCALE_SETTINGS_NAMESPACE)
-    return descriptor === undefined ? undefined : localeSettings(descriptor.value).preference
+    return descriptor === undefined ? undefined : localeSettings.parse(descriptor.value).preference
   }
   const work = new Map<SessionId, Work>()
   let stopped = false
