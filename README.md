@@ -29,7 +29,7 @@
 
 ## 环境要求
 
-- **DSH 版本**：`0.2.1-alpha.1`。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
+- **DSH 版本**：`0.2.1-alpha.2`。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
 
   ```sh
   dsh plugin --profile web allow-version @kermanx/dsh-progress-check@<插件版本> --dsh-version <DSH 版本> --accept-risk
