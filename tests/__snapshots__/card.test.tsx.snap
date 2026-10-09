@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`keeps only the progress summary when collapsed and can expand while reply is disabled 1`] = `
+"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="false"><dl id=":ra:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
+正在验证旧格式读取和恢复。
+下一步检查恢复后的会话内容。</dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="展开本会话的全部进展卡片" aria-expanded="false" aria-controls=":ra:"><span class="_icon_f52afc"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" stroke-width="1"><path d="M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6" stroke="currentColor"></path></svg></span></button></section>"
+`;
+
+exports[`omits empty answers and the reply action when there is nothing for the user to do 1`] = `
+"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="true"><dl id=":r2:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
+正在验证旧格式读取和恢复。
+下一步检查恢复后的会话内容。</dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="折叠本会话的全部进展卡片" aria-expanded="true" aria-controls=":r2:"><span class="_icon_f52afc"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" stroke-width="1"><path d="M12 10L8.70711 6.70711C8.31658 6.31658 7.68342 6.31658 7.29289 6.70711L4 10" stroke="currentColor"></path></svg></span></button></section>"
+`;
+
+exports[`shows the three answers when expanded and puts Reply beside its question 1`] = `
+"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="true"><dl id=":r0:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
+正在验证旧格式读取和恢复。
+下一步检查恢复后的会话内容。</dd><dt>尚未确认</dt><dd>旧格式应统一迁移还是保留独立兼容层，目前无法确定。</dd><dt>需要你确认</dt><dd><div>请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。 <button class="dsh-progress-check-reply" type="button">回复</button></div></dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="折叠本会话的全部进展卡片" aria-expanded="true" aria-controls=":r0:"><span class="_icon_f52afc"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" stroke-width="1"><path d="M12 10L8.70711 6.70711C8.31658 6.31658 7.68342 6.31658 7.29289 6.70711L4 10" stroke="currentColor"></path></svg></span></button></section>"
+`;

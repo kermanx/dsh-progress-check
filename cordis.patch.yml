@@ -1,0 +1,11 @@
+- insert:
+    - id: progress-check
+      name: '@kermanx/dsh-progress-check'
+      config:
+        intervalMs: 60000
+        toolCallThreshold: 5
+        maxConcurrent: 2
+        timeoutMs: 120000
+        maxResponseBytes: 262144
+        maxParseRetries: 3
+        includeSubagents: true

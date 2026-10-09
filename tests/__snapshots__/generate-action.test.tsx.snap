@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`shows generation in place and ignores repeated clicks until completion 1`] = `"<button type="button" class="dsh-progress-check-generate" aria-busy="false">生成进展</button>"`;
