@@ -13,6 +13,8 @@ async function started(calls = 6, config = {}) {
   const adapter = new Adapter(); adapter.calls = calls
   const f = await setup(config, adapter)
   onTestFinished(f.close)
+  // Automatic generation waits for a page that shows the Session.
+  f.watch()
   clock(); f.start(); await adapter.ready.promise
   return f
 }
@@ -367,10 +369,13 @@ describe('running-session progress checks', () => {
   it('limits concurrent checks across multiple sessions and drains queued work', async () => {
     const f = await started(6, { maxConcurrent: 1 })
     f.adapter.checkRelease = deferred()
+    const created: SessionId[] = [f.agent.session.id]
     for (const id of ['second', 'third']) {
       const agent = await f.harness.create(SessionId(id), { provider: 'mock', model: 'fixture' })
+      created.push(agent.session.id)
       agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Another task' }] }))
     }
+    f.watch(true, ...created)
     await f.adapter.waitForMain(6)
     await vi.advanceTimersByTimeAsync(60000)
     await f.ctx.sessions.flush(f.agent.session)
@@ -392,7 +397,7 @@ describe('running-session progress checks', () => {
       await toolsReleased.promise
       return next()
     }, { global: true })
-    clock(); f.start(); await toolEntered.promise
+    clock(); f.watch(); f.start(); await toolEntered.promise
     await vi.advanceTimersByTimeAsync(60000)
     expect(f.adapter.checks).toHaveLength(0)
     toolsReleased.resolve()

@@ -9,3 +9,4 @@
         maxResponseBytes: 262144
         maxParseRetries: 3
         includeSubagents: true
+        onlyWhenVisible: true

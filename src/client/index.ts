@@ -16,7 +16,8 @@ import { progressDefinition } from './definition.ts'
 import { Card } from './Card.tsx'
 import { createExpansionStore } from './expansion.ts'
 import { GenerateAction } from './GenerateAction.tsx'
-import { GENERATE_METHOD, PROGRESS_CHANNEL, generateResponseSchema } from '../protocol.ts'
+import { createClientId, startPresenceReporter } from './presence.ts'
+import { GENERATE_METHOD, PRESENCE_METHOD, PROGRESS_CHANNEL, generateResponseSchema } from '../protocol.ts'
 import { en, zh } from './locales.ts'
 import type { ProgressKey } from './locales.ts'
 
@@ -56,6 +57,15 @@ export function apply(ctx: Context): void {
   const connection = ctx.get('connection') as ConnectionHandle
   ctx.uiConversation.events.register(progressDefinition)
   ctx.effect(() => ctx.locale.register('progressCheck', { zh, en }))
+  // The Host only generates automatic cards while a foreground page shows the
+  // Session, so this page states what it shows whenever that can change.
+  ctx.effect(() => {
+    const clientId = createClientId()
+    return startPresenceReporter({
+      clientId, list: ctx.sessions.list,
+      send: (presence) => { void connection.rpc.call(PROGRESS_CHANNEL, PRESENCE_METHOD, presence).catch(() => {}) },
+    })
+  })
   const failure = createSnapshotStore<number | null>(null)
   let failureSequence = 0
   const onFailure = () => { failure.set(++failureSequence) }

@@ -13,10 +13,11 @@ import type {} from '@deepseek-ai/dsh-settings'
 import { LOCALE_SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-client-locale'
 import { createQuestion } from './prompt.ts'
 import { progressProjection } from './projection.ts'
+import { PresenceRegistry } from './presence.ts'
 import { modelReportSchema } from './records.ts'
 import type { CheckId, FailureStage, StoredRequest } from './records.ts'
 import type { ProgressOutcome } from './types.ts'
-import { GENERATE_METHOD, PROGRESS_CHANNEL, generateRequestSchema } from './protocol.ts'
+import { GENERATE_METHOD, PRESENCE_METHOD, PROGRESS_CHANNEL, generateRequestSchema, presenceReportSchema } from './protocol.ts'
 
 /** Deployment-owned cadence, resource limits, and agent selection. */
 export interface Config {
@@ -27,6 +28,7 @@ export interface Config {
   maxResponseBytes: number
   maxParseRetries: number
   includeSubagents: boolean
+  onlyWhenVisible: boolean
 }
 /** Validated defaults; the call threshold is exclusive. */
 export const Config: z<Config> = z.object({
@@ -37,6 +39,7 @@ export const Config: z<Config> = z.object({
   maxResponseBytes: z.number().min(1).step(1).default(262144),
   maxParseRetries: z.number().min(0).max(3).step(1).default(3),
   includeSubagents: z.boolean().default(true),
+  onlyWhenVisible: z.boolean().default(true),
 })
 /** Services whose lifetime owns the scheduler. Persistence is verified by awaited flushes. */
 export const inject = ['agents', 'sessions', 'sessionProjections', 'llm']
@@ -77,6 +80,7 @@ export function apply(ctx: Context, config: Config): void {
     return descriptor === undefined ? undefined : localeSettings.parse(descriptor.value).preference
   }
   const work = new Map<SessionId, Work>()
+  const presence = new PresenceRegistry()
   let stopped = false
   let active = 0
   const pending = new Set<Promise<ProgressOutcome>>()
@@ -88,6 +92,8 @@ export function apply(ctx: Context, config: Config): void {
     return state
   }
   const running = (entry: Work) => !stopped && work.get(entry.agent.session.id) === entry && entry.agent.status === 'running'
+  // A card is only worth a model call while a foreground page shows the Session.
+  const watched = (entry: Work) => !config.onlyWhenVisible || presence.watched(entry.agent.session.id)
   const stopTimer = (entry: Work) => {
     if (entry.timer !== undefined) clearTimeout(entry.timer)
     entry.timer = undefined
@@ -285,9 +291,14 @@ export function apply(ctx: Context, config: Config): void {
       if (entry.operation === undefined && !entry.due) continue
       const snapshot = entry.snapshot
       if (snapshot === undefined) continue
-      if (entry.operation === undefined && snapshot.toolCount - entry.covered <= config.toolCallThreshold) {
-        reset(entry)
-        continue
+      if (entry.operation === undefined) {
+        if (snapshot.toolCount - entry.covered <= config.toolCallThreshold) {
+          reset(entry)
+          continue
+        }
+        // Nobody is looking: hold the due report instead of spending a model call
+        // on a card no page shows, and let a later presence report resume it.
+        if (!watched(entry)) continue
       }
       if (active >= config.maxConcurrent) break
       const operation = entry.operation ?? queue(entry)
@@ -310,13 +321,26 @@ export function apply(ctx: Context, config: Config): void {
       pump()
       return operation.promise
     },
+    reportPresence: (report) => {
+      presence.report(report)
+      // A page that just came back may have a due report waiting for it.
+      pump()
+    },
   })
   ctx.inject(['connection', 'webServer'], (scope) => {
+    const invalid = () => ({
+      ok: false as const,
+      error: { code: 'progress-check/invalid-request', message: 'invalid progress-check request', details: {} },
+    })
     scope.connection.rpc.handle(PROGRESS_CHANNEL, async (endpoint, payload, signal) => {
-      const request = generateRequestSchema.safeParse(payload)
-      if (endpoint !== GENERATE_METHOD || !request.success) return {
-        ok: false, error: { code: 'progress-check/invalid-request', message: 'invalid progress-check request', details: {} },
+      if (endpoint === PRESENCE_METHOD) {
+        const report = presenceReportSchema.safeParse(payload)
+        if (!report.success) return invalid()
+        ctx.progressCheck.reportPresence(report.data)
+        return { ok: true, value: {} }
       }
+      const request = generateRequestSchema.safeParse(payload)
+      if (endpoint !== GENERATE_METHOD || !request.success) return invalid()
       const outcome = await ctx.progressCheck.generate(SessionId(request.data.sessionId), signal)
       return outcome.ok
         ? { ok: true, value: { seq: outcome.seq } }
@@ -358,6 +382,7 @@ export function apply(ctx: Context, config: Config): void {
     stopped = true
     for (const entry of work.values()) pause(entry)
     work.clear()
+    presence.clear()
     return Promise.allSettled([...pending]).then(() => {})
   })
   for (const agent of ctx.agents.list()) attach(agent)

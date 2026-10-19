@@ -50,6 +50,11 @@ export class Adapter extends LlmAdapter {
   answer = textChunks(JSON.stringify(modelReport))
   answers: StreamChunk[][] = []
   calls = 6
+  /**
+   * Leading main requests per Session that answer with tool calls. Raising it
+   * mid-test produces another batch of work for the next cadence interval.
+   */
+  toolRounds = 1
   activeChecks = 0
   peakChecks = 0
   private mainCounts = new Map<string, number>()
@@ -89,19 +94,34 @@ export class Adapter extends LlmAdapter {
     for (const waiter of this.mainWaiters) if (this.main.length >= waiter.count) waiter.resolve()
     const count = (this.mainCounts.get(options.sessionId ?? '') ?? 0) + 1
     this.mainCounts.set(options.sessionId ?? '', count)
-    if (count === 1) { yield* toolChunks(this.calls); return }
+    if (count <= this.toolRounds) { yield* toolChunks(this.calls); return }
     this.ready.resolve()
     await untilReleased(this.release.promise, options.signal)
     if (!options.signal?.aborted) yield* textChunks('Main task finished.')
   }
 }
-export async function setup(config: Partial<Progress.Config> = {}, adapter = new Adapter()) {
+export async function setup(
+  config: Partial<Progress.Config> = {}, adapter = new Adapter(), options: { rpc?: boolean } = {},
+) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-progress-test-'))
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
   await ctx.plugin(Jsonl, { root, compression: 'none' })
   ctx.llm.registerAdapter(['mock'], adapter)
   ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'Read a fixture', parameters: {}, async execute() { return [{ type: 'text', text: 'fixture read' }] } }))
+  let handler: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
+  if (options.rpc === true) {
+    // Minimal Connection face: the plugin registers its channel handler against it.
+    ctx.provide('connection', {
+      rpc: {
+        handle: (_channel: string, registered: typeof handler) => {
+          handler = registered
+          return async () => {}
+        },
+      },
+    } as never)
+    ctx.provide('webServer', {} as never)
+  }
   const plugin = await ctx.plugin(Progress, { ...Progress.Config({}), ...config })
   const harness = await mountAgentLoopTestHarness(ctx)
   const agent = await harness.create(SessionId('progress-test'), { provider: 'mock', model: 'fixture', reasoningEffort: ReasoningEffortId('high'), maxTokens: 2000 })
@@ -124,5 +144,28 @@ export async function setup(config: Partial<Progress.Config> = {}, adapter = new
     await handle.close()
     await rm(root, { recursive: true, force: true })
   }
-  return { ctx, root, agent, adapter, events, plugin, start, close, handle, waitRecords, harness }
+  /**
+   * Report what the one fixture page shows, replacing its previous report.
+   * @param visible - whether that page is on screen.
+   * @param sessionIds - Sessions it shows; the fixture Session by default.
+   */
+  const watch = (visible = true, ...sessionIds: SessionId[]) => {
+    ctx.progressCheck.reportPresence({
+      clientId: 'fixture-page', visible,
+      sessionIds: sessionIds.length === 0 ? [agent.session.id] : sessionIds,
+    })
+  }
+  /**
+   * Call the plugin's registered Connection channel, waiting for the
+   * registration that `ctx.inject(['connection', 'webServer'])` defers.
+   * @param endpoint - channel endpoint name.
+   * @param payload - untrusted request payload.
+   * @returns the handler's result.
+   */
+  const callRpc = async (endpoint: string, payload: unknown): Promise<unknown> => {
+    for (let tick = 0; tick < 10 && handler === undefined; tick++) await Promise.resolve()
+    if (handler === undefined) throw new Error('the fixture Connection channel was never registered')
+    return handler(endpoint, payload, new AbortController().signal)
+  }
+  return { ctx, root, agent, adapter, events, plugin, start, close, handle, waitRecords, harness, watch, callRpc }
 }
