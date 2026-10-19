@@ -21,12 +21,13 @@ const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 
 /** Published versions of dev-only packages, which no peerDependency pins. */
 const DEV_ONLY_VERSIONS = {
-  '@deepseek-ai/dsh-agent-loop': '0.2.1-alpha.2',
-  '@deepseek-ai/dsh-agent-loop-testkit': '0.2.1-alpha.2',
-  '@deepseek-ai/dsh-tools': '0.2.1-alpha.2',
-  '@deepseek-ai/dsh-system-prompt': '0.2.1-alpha.2',
-  '@deepseek-ai/dsh-session-persistence': '0.2.1-alpha.2',
-  '@deepseek-ai/dsh-session-persistence-jsonl': '0.2.1-alpha.2',
+  '@deepseek-ai/dsh-tool-testkit': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-agent-loop': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-agent-loop-testkit': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-tools': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-system-prompt': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-session-persistence': '0.2.1-rc.2',
+  '@deepseek-ai/dsh-session-persistence-jsonl': '0.2.1-rc.2',
 }
 
 const write = process.argv.includes('--write')

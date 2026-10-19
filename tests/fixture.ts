@@ -7,9 +7,9 @@ import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
-import Jsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as Jsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import * as Progress from '../src/index.ts'
 
 export const modelReport = { progress: ['正在验证会话保存修复。', '下一步验证旧格式读取和恢复。'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'] }

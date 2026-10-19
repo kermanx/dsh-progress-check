@@ -15,7 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import { progressDefinition } from './definition.ts'
 import { Card } from './Card.tsx'
 import { createExpansionStore } from './expansion.ts'
-import { GenerateAction } from './GenerateAction.tsx'
+import { GenerateAction, type GenerateActionProps } from './GenerateAction.tsx'
 import { createClientId, startPresenceReporter } from './presence.ts'
 import { GENERATE_METHOD, PRESENCE_METHOD, PROGRESS_CHANNEL, generateResponseSchema } from '../protocol.ts'
 import { en, zh } from './locales.ts'
@@ -79,8 +79,8 @@ export function apply(ctx: Context): void {
     name: 'shell.overlay', id: 'progress-check-failure', locale: 'progressCheck',
     inject: () => ({ hooks: { failure } }),
   }, FailureToast))
-  ctx.slots.inject('conversation.chat.running.actions', () => ctx.slots.register({
-    name: 'conversation.chat.running.actions', id: 'progress-check', locale: 'progressCheck',
+  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
+    name: 'conversation.chat.turnTail', id: 'progress-check', locale: 'progressCheck',
     inject: sessionId => ({
       generate: async (signal: AbortSignal) => {
         const result = await connection.rpc.call(PROGRESS_CHANNEL, GENERATE_METHOD, { sessionId }, signal)
@@ -88,7 +88,8 @@ export function apply(ctx: Context): void {
       },
       onFailure,
     }),
-  }, GenerateAction))
+  }, ({ turn, ...props }: PropsRuntime<'conversation.chat.turnTail'> & GenerateActionProps) =>
+    turn.status === 'open' ? createElement(GenerateAction, props) : null))
   ctx.effect(() => {
     const style = document.createElement('style')
     style.textContent = styles
