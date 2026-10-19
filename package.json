@@ -1,6 +1,6 @@
 {
   "name": "@kermanx/dsh-progress-check",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Periodic contextual progress reports for running DSH sessions",
   "type": "module",
   "main": "lib/index.js",
@@ -15,7 +15,8 @@
       "default": "./lib/client.js"
     },
     "./package.json": "./package.json",
-    "./cordis.patch.yml": "./cordis.patch.yml"
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json"
   },
   "files": [
     "lib",
@@ -25,7 +26,8 @@
     "README.md",
     "LICENSE",
     "assets",
-    "src/protocol.ts"
+    "src/protocol.ts",
+    "locale"
   ],
   "repository": {
     "type": "git",
@@ -187,5 +189,9 @@
     "@deepseek-ai/dsh-settings": "link:../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/dsh-tool-testkit": "link:../deepseek-harness/packages/test-support/tool-testkit"
   },
-  "packageManager": "pnpm@10.16.1"
+  "packageManager": "pnpm@10.16.1",
+  "author": "kermanx",
+  "engines": {
+    "dsh": "0.2.1-rc.2"
+  }
 }

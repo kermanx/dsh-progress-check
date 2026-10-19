@@ -14,7 +14,7 @@
 
 ![只显示「当前进度」一组的进展卡片，以及运行中「用时…」文字后面的「生成进展」入口](assets/example.webp)
 
-图中这张卡片只有「当前进度」一组：当时「尚未确认」和「需要你确认」都没有内容，这两组就不会出现。右上角图标可折叠或展开本会话的全部卡片；运行中的「深度求索中，用时…」后面有「生成进展」，可随时手工生成一张。
+图中这张卡片只有「当前进度」一组：当时「尚未确认」和「需要你确认」都没有内容，这两组就不会出现。右上角图标可折叠或展开本会话的全部卡片；当前运行轮次的末尾有「生成进展」，可随时手工生成一张。
 
 ## 主要功能
 
@@ -29,7 +29,7 @@
 
 ## 环境要求
 
-- **DSH 版本**：`0.2.1-alpha.2`。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
+- **DSH 版本**：`0.2.1-rc.2`。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
 
   ```sh
   dsh plugin --profile web allow-version @kermanx/dsh-progress-check@<插件版本> --dsh-version <DSH 版本> --accept-risk
@@ -42,7 +42,15 @@
 
 ## 安装
 
-### 从 GitHub 安装
+### 从插件市场或 Git 安装
+
+可在「DS 内部插件市场」安装「进展汇报」。Git 仓库已包含构建产物，也可直接安装：
+
+```sh
+dsh plugin --profile web add https://github.com/kermanx/dsh-progress-check.git
+```
+
+### 从 GitHub Release 安装
 
 每个版本都会把构建好的包附在 [GitHub Release](https://github.com/kermanx/dsh-progress-check/releases) 里；安装时不需要 npm，也不需要在本机构建或授权构建脚本：
 
