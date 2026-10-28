@@ -79,8 +79,10 @@ export function apply(ctx: Context): void {
     name: 'shell.overlay', id: 'progress-check-failure', locale: 'progressCheck',
     inject: () => ({ hooks: { failure } }),
   }, FailureToast))
-  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
-    name: 'conversation.chat.turnTail', id: 'progress-check', locale: 'progressCheck',
+  // Turn tails are published only after turn/end. A live Session utility stays
+  // available while the agent is working, including before its first reply.
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities', id: 'progress-check', locale: 'progressCheck',
     inject: sessionId => ({
       generate: async (signal: AbortSignal) => {
         const result = await connection.rpc.call(PROGRESS_CHANNEL, GENERATE_METHOD, { sessionId }, signal)
@@ -88,8 +90,10 @@ export function apply(ctx: Context): void {
       },
       onFailure,
     }),
-  }, ({ turn, ...props }: PropsRuntime<'conversation.chat.turnTail'> & GenerateActionProps) =>
-    turn.status === 'open' ? createElement(GenerateAction, props) : null))
+  }, ({ useSession, ...props }: PropsRuntime<'conversation.session.header.utilities'> & GenerateActionProps) => {
+    const running = useSession(session => session.running)
+    return running ? createElement(GenerateAction, props) : null
+  }))
   ctx.effect(() => {
     const style = document.createElement('style')
     style.textContent = styles
