@@ -17,7 +17,8 @@ import { PresenceRegistry } from './presence.ts'
 import { modelReportSchema } from './records.ts'
 import type { CheckId, FailureStage, StoredRequest } from './records.ts'
 import type { ProgressOutcome } from './types.ts'
-import { GENERATE_METHOD, PRESENCE_METHOD, PROGRESS_CHANNEL, generateRequestSchema, presenceReportSchema } from './protocol.ts'
+import { GENERATE_METHOD, PRESENCE_METHOD, generateRequestSchema, presenceReportSchema } from './protocol.ts'
+import { registerProgressRpc } from './rpc.ts'
 
 /** Deployment-owned cadence, resource limits, and agent selection. */
 export interface Config {
@@ -70,10 +71,12 @@ interface Operation {
 
 /**
  * Attach background checks to all live agents and unwind timers and calls on removal.
+ * Awaits projection registration before exposing reads or operations that depend on it.
  * @param ctx - plugin-owned context.
  * @param config - validated configuration.
+ * @returns when the projection is registered and the schedulers are listening.
  */
-export function apply(ctx: Context, config: Config): void {
+export async function apply(ctx: Context, config: Config): Promise<void> {
   const localeSettings = zod.object({ preference: zod.string().optional() })
   const outputLocale = () => {
     const descriptor = ctx.get('settings')?.describe().find(form => form.ns === LOCALE_SETTINGS_NAMESPACE)
@@ -84,13 +87,11 @@ export function apply(ctx: Context, config: Config): void {
   let stopped = false
   let active = 0
   const pending = new Set<Promise<ProgressOutcome>>()
-  ctx.sessionProjections.register(progressProjection)
+  // Retain the ready handle: the registry-level read is deprecated, and the
+  // handle keeps folding even if the unit later leaves the live drive.
+  const projection = await ctx.sessionProjections.register(progressProjection)
 
-  const stateOf = (agent: Agent) => {
-    const state = ctx.sessionProjections.stateOf(agent.session, 'progress-check')
-    if (state === undefined) throw new Error('progress-check projection is unavailable')
-    return state
-  }
+  const stateOf = (agent: Agent) => projection.stateOf(agent.session)
   const running = (entry: Work) => !stopped && work.get(entry.agent.session.id) === entry && entry.agent.status === 'running'
   // A card is only worth a model call while a foreground page shows the Session.
   const watched = (entry: Work) => !config.onlyWhenVisible || presence.watched(entry.agent.session.id)
@@ -327,12 +328,12 @@ export function apply(ctx: Context, config: Config): void {
       pump()
     },
   })
-  ctx.inject(['connection', 'webServer'], (scope) => {
+  ctx.inject(['connection'], (scope) => {
     const invalid = () => ({
       ok: false as const,
       error: { code: 'progress-check/invalid-request', message: 'invalid progress-check request', details: {} },
     })
-    scope.connection.rpc.handle(PROGRESS_CHANNEL, async (endpoint, payload, signal) => {
+    registerProgressRpc(scope, async (endpoint, payload, signal) => {
       if (endpoint === PRESENCE_METHOD) {
         const report = presenceReportSchema.safeParse(payload)
         if (!report.success) return invalid()

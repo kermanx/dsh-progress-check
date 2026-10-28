@@ -11,6 +11,9 @@ import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as Jsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import * as Progress from '../src/index.ts'
+import * as Connection from '@deepseek-ai/dsh-client-connection'
+import { createWebConnectionRpc } from '@deepseek-ai/dsh-client-connection/src/client/rpc.ts'
+import { PROGRESS_CHANNEL } from '../src/protocol.ts'
 
 export const modelReport = { progress: ['正在验证会话保存修复。', '下一步验证旧格式读取和恢复。'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'] }
 export const report = { ...modelReport, progress: modelReport.progress.join('\n') }
@@ -109,18 +112,24 @@ export async function setup(
   await ctx.plugin(Jsonl, { root, compression: 'none' })
   ctx.llm.registerAdapter(['mock'], adapter)
   ctx.tools.register(defineContentToolFixture({ name: 'echo', description: 'Read a fixture', parameters: {}, async execute() { return [{ type: 'text', text: 'fixture read' }] } }))
-  let handler: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
+  let rpc: ReturnType<typeof createWebConnectionRpc> | undefined
   if (options.rpc === true) {
-    // Minimal Connection face: the plugin registers its channel handler against it.
-    ctx.provide('connection', {
-      rpc: {
-        handle: (_channel: string, registered: typeof handler) => {
-          handler = registered
-          return async () => {}
-        },
+    let record: unknown
+    ctx.provide('credentials', {
+      readRecord: async () => record,
+      modifyRecord: async (_key: unknown, mutate: (current: unknown) => Promise<unknown>) => {
+        record = await mutate(record)
+        return record
       },
+      deleteRecord: async () => { record = undefined },
     } as never)
-    ctx.provide('webServer', {} as never)
+    ctx.provide('webServer', { host: '127.0.0.1', protocol: 'http:', register: () => () => {} } as never)
+    await ctx.plugin(Connection).await()
+    const connection = ctx.get('connection') as Connection.HostConnectionHandle
+    const transport = connection.createSharedFetchHandler('/api')
+    rpc = createWebConnectionRpc((input, init) => transport.fetch(
+      new Request(new URL(input, 'http://127.0.0.1/'), init), connection.browserPeer,
+    ))
   }
   const plugin = await ctx.plugin(Progress, { ...Progress.Config({}), ...config })
   const harness = await mountAgentLoopTestHarness(ctx)
@@ -156,16 +165,14 @@ export async function setup(
     })
   }
   /**
-   * Call the plugin's registered Connection channel, waiting for the
-   * registration that `ctx.inject(['connection', 'webServer'])` defers.
+   * Call through the real Connection registry and browser RPC framing.
    * @param endpoint - channel endpoint name.
    * @param payload - untrusted request payload.
    * @returns the handler's result.
    */
   const callRpc = async (endpoint: string, payload: unknown): Promise<unknown> => {
-    for (let tick = 0; tick < 10 && handler === undefined; tick++) await Promise.resolve()
-    if (handler === undefined) throw new Error('the fixture Connection channel was never registered')
-    return handler(endpoint, payload, new AbortController().signal)
+    if (rpc === undefined) throw new Error('the fixture Connection was not enabled')
+    return rpc.call(PROGRESS_CHANNEL, `progress-check/${endpoint}`, payload)
   }
   return { ctx, root, agent, adapter, events, plugin, start, close, handle, waitRecords, harness, watch, callRpc }
 }

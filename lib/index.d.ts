@@ -19,10 +19,12 @@ declare const Config: z<Config>;
 declare const inject: string[];
 /**
  * Attach background checks to all live agents and unwind timers and calls on removal.
+ * Awaits projection registration before exposing reads or operations that depend on it.
  * @param ctx - plugin-owned context.
  * @param config - validated configuration.
+ * @returns when the projection is registered and the schedulers are listening.
  */
-declare function apply(ctx: Context, config: Config): void;
+declare function apply(ctx: Context, config: Config): Promise<void>;
 //#endregion
 export { Config, apply, inject };
 //# sourceMappingURL=index.d.ts.map

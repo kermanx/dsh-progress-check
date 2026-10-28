@@ -2,16 +2,16 @@
 import { z } from 'zod'
 
 /** Connection owns authentication, correlation, transport, and cancellation. */
-export const PROGRESS_CHANNEL = '/progress-check'
+export const PROGRESS_CHANNEL = '/api'
 /** The sole generation operation on this channel. */
-export const GENERATE_METHOD = 'generate'
+export const GENERATE_METHOD = 'progress-check/generate'
 /** Untrusted browser input; only the target Session may be chosen. */
 export const generateRequestSchema = z.object({ sessionId: z.string().min(1) }).strict()
 /** Successful response identifies the durable report already delivered through Session history. */
 export const generateResponseSchema = z.object({ seq: z.number().int().nonnegative() }).strict()
 
 /** Visibility operation: which Sessions a browser page is actually showing. */
-export const PRESENCE_METHOD = 'presence'
+export const PRESENCE_METHOD = 'progress-check/presence'
 /** Refresh cadence of a foreground page; the Host expires a report after {@link PRESENCE_TTL_MS}. */
 export const PRESENCE_HEARTBEAT_MS = 5000
 /**

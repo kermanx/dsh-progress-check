@@ -11,13 +11,8 @@ const stateSchema = z.object({
   covered: z.number().int().nonnegative(),
 })
 type State = z.infer<typeof stateSchema>
-declare module '@deepseek-ai/dsh-session-projection' {
-  interface SessionProjectionStateMap {
-    'progress-check': State
-  }
-}
 /** Counts child-owned tool/call events, without counting retries or inherited calls. */
-export const progressProjection: ProjectionDefinition<'progress-check'> = {
+export const progressProjection: ProjectionDefinition<'progress-check', State> = {
   key: 'progress-check', stateVersion: 1, stateSchema,
   init: (header, inherited) => ({ sessionId: header.id, inherited, seq: 0, toolCount: 0, covered: 0 }),
   apply: (state, event) => {

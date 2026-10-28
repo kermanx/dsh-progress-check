@@ -74,6 +74,18 @@ describe('visibility gating', () => {
     expect(f.adapter.checks).toHaveLength(1)
   })
 
+  it('generates through the real Connection route and removes routes with the plugin', async () => {
+    const f = await setup({}, new Adapter(), { rpc: true })
+    onTestFinished(f.close)
+    f.start(); await f.adapter.ready.promise
+    expect(await f.callRpc('generate', { sessionId: f.agent.session.id }))
+      .toMatchObject({ ok: true, value: { seq: expect.any(Number) } })
+    expect(f.adapter.checks).toHaveLength(1)
+    await f.plugin.dispose()
+    await expect(f.callRpc('presence', { clientId: 'page', sessionIds: [], visible: false }))
+      .rejects.toThrow('HTTP 404')
+  })
+
   it('resumes for the deferred work and then keeps a full interval', async () => {
     const adapter = new Adapter(); adapter.calls = 6; adapter.toolRounds = 2
     const f = await setup({}, adapter)
