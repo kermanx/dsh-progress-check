@@ -2,7 +2,7 @@ name: Release
 
 # Push a tag matching the manifest version, for example:
 #   git tag v0.1.0 && git push origin v0.1.0
-# The job builds the plugin, packs the built artifacts, and attaches them to a
+# The job packs the checked-in, locally validated artifacts and attaches them to a
 # GitHub release. Installing that tarball needs neither npm nor a build
 # authorization on the user's machine.
 
@@ -19,12 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
 
       - name: Check the tag against the manifest version
         run: |
@@ -34,26 +31,23 @@ jobs:
             exit 1
           fi
 
-      - name: Point linked devDependencies at published DSH packages
-        run: node scripts/ci-registry-deps.mjs --write
-
-      - name: Install
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm run build
+      # DSH master and its test-support packages are not all published to npm.
+      # Release exactly the artifacts checked in after local typecheck/test/build,
+      # which are also the artifacts installed from the plugin market's Git source.
+      - name: Check the prebuilt entrypoints
+        run: |
+          test -s lib/index.js
+          test -s lib/index.d.ts
+          test -s lib/client.js
+          node --check lib/index.js
+          node --check lib/client.js
 
       # The versioned name keeps each release immutable; the short alias makes
       # the current release reachable through a stable URL.
       - name: Pack the built plugin
         run: |
-          pnpm pack --pack-destination dist
+          mkdir -p dist
+          npm pack --ignore-scripts --pack-destination dist
           cd dist
           cp kermanx-dsh-progress-check-*.tgz dsh-progress-check.tgz
           ls -l
