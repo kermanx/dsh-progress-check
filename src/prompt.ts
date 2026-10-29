@@ -1,28 +1,28 @@
 /** English progress instructions with the current DSH language preference. */
-const QUESTION = `This is an independent progress query while the main task continues in parallel. Report the task's current state based on the complete preceding conversation. Do not carry out the task, call tools, or ask follow-up questions outside the report. Report only plans you had already worked out and are actually carrying out; do not devise new plans for this report.
+const QUESTION = `Independently report progress from the full conversation while the main task continues. Do not execute the task, call tools, ask questions outside the report, or devise new plans; report only plans already decided and being carried out.
 
-Before producing the final JSON, you must think in the thinking phase and check the facts and output requirements, producing non-empty reasoning; do not skip thinking and answer directly. Do not include the reasoning in the final JSON.
+First verify facts and requirements in the thinking phase with non-empty reasoning; exclude reasoning from the final JSON.
 
-Return only one valid JSON object with exactly the fields "progress", "uncertainties", and "userActions". All three values must be arrays of strings. Do not add any other text or code fences.
+Return only a valid JSON object with exactly "progress", "uncertainties", and "userActions", all arrays of strings. No extra text or code fences.
 
-For "progress", choose one structure according to the task's size and strictly follow its item count and order:
-- For a large task, exactly three items: item 1 is the subtask currently underway; item 2 is the operation being performed within that subtask right now; item 3 is the next step that had already been decided.
-- For a small task, exactly two items: item 1 is the current progress; item 2 is the next step that had already been decided.
+"progress" must follow this order:
+- Large tasks: exactly three items: current subtask, current operation within it, previously decided next step.
+- Small tasks: exactly two items: current progress, previously decided next step.
 
-For a large task, fill the JSON with the following three short sentences, replacing the placeholders in braces with actual content and removing the braces. Translate the sentence templates into the output language specified below. Fill the other two arrays only when the conditions below are met. For a small task, combine the first two progress items into one:
-{"progress":["Working on {current subtask}.","Currently {operation being performed right now}.","Next, {one previously decided action immediately following the current operation}."],"uncertainties":[],"userActions":[]}
+Fill and translate this template into the output language, replacing placeholders and removing braces. For small tasks, combine the first two sentences; fill the other arrays only as specified below:
+{"progress":["Working on {subtask}.","Currently {operation}.","Next, {previously decided immediate next step}."],"uncertainties":[],"userActions":[]}
 
-Each item must have only one central action, contain only the information assigned to its position, and avoid repeating the other items. Do not add a fourth item or a separate background item. Item 1 must directly name the specific stage of work currently underway; do not substitute the name of the whole task, recap earlier stages, or reintroduce what the user asked you to do. Item 2 must directly state the current action, not list material you have just viewed, checked, or understood. Do not recount several stages as "completed ... now ...", or tuck a recap into commas or parentheses. Item 3 must state only one previously decided action immediately following the current operation and end there; do not continue to the step after that or list the entire process through submission, delivery, or completion.
+Each item contains one action in its assigned position, without repetition or added background. Directly name the current stage and operation; do not restate the task, user request, reviewed material, or earlier stages. Give only the previously decided immediate next action, without later steps.
 
-Each item corresponds to one line and must contain exactly one sentence. First think of a complete sentence, then shorten its wording while preserving its information and human readability. Say what you have done, not what you have read. Omit mechanical, generic operations and, unless necessary, do not repeat what the user already knows. When discussing design, state only the final design, without explaining its rationale. Summarize architectural changes and the overall approach without expanding on code or implementation logic. You may use a filename or identifier to locate something when necessary, but do not enumerate file paths, identifiers, or code snippets.
+Write one sentence per item/line: form a complete sentence, then shorten without losing meaning or readability. Report actions, not reading; omit mechanical, generic operations and unnecessary repetition of known information. State final designs, architectural changes, and the overall approach without rationale or implementation details. Use filenames or identifiers only for necessary orientation; do not list paths, identifiers, or code.
 
-"uncertainties" must contain only unresolved questions already present in the context that you are truly very confused about, or technical decisions you are very unsure about. Do not include objective facts you can establish yourself through available information, investigation, or verification, even if you have not checked them yet. Do not repackage plans already decided and implemented as "whether user confirmation is needed", or invent concerns to fill this field. Ordinary pending work, routine verification, general risks, and extra matters you were not asked to handle do not belong here. Return [] if nothing qualifies.
+"uncertainties": only existing unresolved questions you are deeply confused about or technical decisions you are very unsure of. Exclude facts you can verify yourself, settled plans reframed as needing confirmation, invented concerns, ordinary pending work, routine verification, general risks, and out-of-scope matters. Use [] if none qualify.
 
-"userActions" must contain only things the user can do in parallel with you right now that offer a very high return on their effort toward completing the overall task efficiently. Do not hand work to the user merely because they could do it for you; do your own work yourself. If a question must be answered by the user, or an operation must be performed by the user, direct the user in your formal reply instead of putting it in this field. Return [] if nothing qualifies.
+"userActions": only actions the user can take in parallel now with very high return on effort toward completing the task. Do not delegate your own work. Put required user answers or operations in your formal reply instead. Use [] if none qualify.
 
-Use the output language specified below. Distinguish verified results from future plans, and do not invent progress percentages or problems. Before outputting, check that the JSON quotes, commas, and brackets are correct; that progress has exactly three or two items for the chosen structure, each with exactly one sentence and the last item being the next step; and that uncertainties and userActions contain only qualifying content. Empty arrays are a normal result.`
+Use the specified output language. Distinguish verified results from plans; invent no percentages or problems. Before output, check JSON syntax, item counts, one sentence per item, next step last, and eligibility of the other two arrays' contents. Empty arrays are normal.`
 
-const RETRY_INSTRUCTION = 'The previous response could not be parsed in the required format. Generate it again. Return only a valid JSON object: all three fields must be arrays of strings; "progress" must have exactly two items for a small task or three for a large task, each non-empty and containing exactly one sentence, with the last item being the next step; return empty arrays for "uncertainties" and "userActions" when nothing qualifies. Do not add other fields, explanatory text, or code fences.'
+const RETRY_INSTRUCTION = 'The previous response could not be parsed. Rewrite strictly under the JSON requirements above: progress has two or three non-empty, single-sentence items, with the next step last; the other arrays are empty unless content qualifies. No extra fields, explanations, or code fences.'
 
 /**
  * Build the logged query using the preference at the start of this attempt.
@@ -32,7 +32,7 @@ const RETRY_INSTRUCTION = 'The previous response could not be parsed in the requ
  */
 export function createQuestion(locale: string | undefined, retry: boolean): string {
   const language = locale === undefined
-    ? "No explicit DSH language preference is set. Use the user's language from the conversation for all natural-language strings in the JSON."
-    : `The user-selected DSH output language is ${JSON.stringify(locale)} (BCP 47 language tag). Write all natural-language strings in the JSON in this language, even if the conversation or the examples above use a different language.`
-  return `<system>\n${QUESTION}${retry ? `\n\n${RETRY_INSTRUCTION}` : ''}\n\n${language} Keep the JSON field names exactly as specified.\n</system>`
+    ? "Use the user's language from the conversation for JSON text."
+    : `DSH output language is ${JSON.stringify(locale)} (BCP 47). Use it for JSON text, overriding the conversation and examples.`
+  return `<system>\n${QUESTION}${retry ? `\n\n${RETRY_INSTRUCTION}` : ''}\n\n${language} Keep field names unchanged.\n</system>`
 }
