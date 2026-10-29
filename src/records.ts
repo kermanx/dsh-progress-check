@@ -27,6 +27,7 @@ export const resultSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
   coveredToolCount: z.number().int().nonnegative(),
+  coveredStepCount: z.number().int().nonnegative().optional(),
   contextSeq: z.number().int().nonnegative(),
   report: reportSchema,
 })
@@ -38,6 +39,8 @@ export interface ResultRecord {
   attempt?: number
   sessionId: SessionId
   coveredToolCount: number
+  /** Completed steps in the captured context; absent on older records. */
+  coveredStepCount?: number
   contextSeq: number
   report: Report
   blocks: ContentBlock[]
@@ -53,6 +56,8 @@ export interface RequestRecord {
   prepared?: boolean
   sessionId: SessionId
   coveredToolCount: number
+  /** Completed steps in the captured context; absent on older records. */
+  coveredStepCount?: number
   contextSeq: number
   request: StoredRequest
 }
@@ -74,7 +79,7 @@ export interface ResponseRecord {
 }
 /** Operation that failed, distinct from provider terminal reasons in the response record. */
 export type FailureStage = 'prepare' | 'request' | 'response' | 'parse' | 'persist'
-/** Failed or canceled query; it does not consume the tool-call watermark. */
+/** Failed or canceled query; it does not consume the completed-step watermark. */
 export interface FailureRecord {
   version: 1
   id: CheckId

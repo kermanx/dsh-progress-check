@@ -87,7 +87,7 @@ describe('visibility gating', () => {
   })
 
   it('resumes for the deferred work and then keeps a full interval', async () => {
-    const adapter = new Adapter(); adapter.calls = 6; adapter.toolRounds = 2
+    const adapter = new Adapter(); adapter.toolRounds = 5
     const f = await setup({}, adapter)
     onTestFinished(f.close)
     clock(); f.start(); await adapter.ready.promise
@@ -102,7 +102,7 @@ describe('visibility gating', () => {
     expect(adapter.checks).toHaveLength(1)
     // New work arrives while the page stays visible.
     adapter.release.resolve(); await f.agent.whenIdle()
-    adapter.toolRounds = 4; adapter.release = deferred(); adapter.ready = deferred()
+    adapter.toolRounds = 10; adapter.release = deferred(); adapter.ready = deferred()
     f.start(); await adapter.ready.promise
     await vi.advanceTimersByTimeAsync(1)
     await f.waitRecords('plugin:progress-check/result', 2)

@@ -23,7 +23,7 @@ import { registerProgressRpc } from './rpc.ts'
 /** Deployment-owned cadence, resource limits, and agent selection. */
 export interface Config {
   intervalMs: number
-  toolCallThreshold: number
+  intervalSteps: number
   maxConcurrent: number
   timeoutMs: number
   maxResponseBytes: number
@@ -31,15 +31,15 @@ export interface Config {
   includeSubagents: boolean
   onlyWhenVisible: boolean
 }
-/** Validated defaults; the call threshold is exclusive. */
+/** Validated defaults; both minimum intervals must be met for automatic checks. */
 export const Config: z<Config> = z.object({
   intervalMs: z.number().min(1).step(1).default(60000),
-  toolCallThreshold: z.number().min(0).step(1).default(5),
-  maxConcurrent: z.number().min(1).step(1).default(2),
+  intervalSteps: z.number().min(1).step(1).default(5),
+  maxConcurrent: z.number().min(1).step(1).default(1),
   timeoutMs: z.number().min(1).step(1).default(120000),
   maxResponseBytes: z.number().min(1).step(1).default(262144),
   maxParseRetries: z.number().min(0).max(3).step(1).default(3),
-  includeSubagents: z.boolean().default(true),
+  includeSubagents: z.boolean().default(false),
   onlyWhenVisible: z.boolean().default(true),
 })
 /** Services whose lifetime owns the scheduler. Persistence is verified by awaited flushes. */
@@ -49,6 +49,7 @@ interface Snapshot {
   request: StoredRequest
   signal: AbortSignal | undefined
   toolCount: number
+  stepCount: number
   seq: number
 }
 interface Work {
@@ -159,7 +160,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         const recordRequest = () => {
           appendPluginRecord(session, 'plugin:progress-check/request', {
             version: 1, id, attempt, prepared: preparedConfig, sessionId: session.id,
-            coveredToolCount: snapshot.toolCount, contextSeq: snapshot.seq, request,
+            coveredToolCount: snapshot.toolCount, coveredStepCount: snapshot.stepCount, contextSeq: snapshot.seq, request,
           })
           requestRecorded = true
         }
@@ -216,11 +217,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           const report = modelReportSchema.parse(JSON.parse(text.replace(/^\s*```(?:json)?\s*\n/u, '').replace(/\n```\s*$/u, '')))
           stage = 'persist'
           const seq = appendPluginRecord(session, 'plugin:progress-check/result', {
-            version: 1, id, attempt, sessionId: session.id, coveredToolCount: snapshot.toolCount, contextSeq: snapshot.seq,
+            version: 1, id, attempt, sessionId: session.id, coveredToolCount: snapshot.toolCount, coveredStepCount: snapshot.stepCount, contextSeq: snapshot.seq,
             report, blocks: assembler.blocks(), ...assembler.usage === undefined ? {} : { usage: assembler.usage },
           })
           await flush(entry)
-          entry.covered = snapshot.toolCount
+          entry.covered = snapshot.stepCount
           return { ok: true, seq }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error)
@@ -293,10 +294,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       const snapshot = entry.snapshot
       if (snapshot === undefined) continue
       if (entry.operation === undefined) {
-        if (snapshot.toolCount - entry.covered <= config.toolCallThreshold) {
-          reset(entry)
-          continue
-        }
+        if (snapshot.stepCount - entry.covered < config.intervalSteps) continue
         // Nobody is looking: hold the due report instead of spending a model call
         // on a card no page shows, and let a later presence report resume it.
         if (!watched(entry)) continue
@@ -373,7 +371,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       if (entry !== undefined && running(entry)) {
         const { signal, ...request } = options
         const state = stateOf(entry.agent)
-        entry.snapshot = { request: structuredClone(request), signal, toolCount: state.toolCount, seq: state.seq }
+        entry.snapshot = { request: structuredClone(request), signal, toolCount: state.toolCount, stepCount: state.stepCount, seq: state.seq }
         pump()
       }
     }

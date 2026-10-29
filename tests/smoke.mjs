@@ -17,7 +17,7 @@ await writeFile(join(profile, 'package.json'), JSON.stringify({
   dependencies: { '@kermanx/dsh-progress-check': `link:${project}` },
   dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', '@kermanx/dsh-progress-check'] } },
 }) + '\n')
-await writeFile(join(profile, 'cordis.patch.yml'), `- id: progress-check\n  config:\n    intervalMs: ${manual ? 60000 : 1000}\n- insert:\n    - id: progress-smoke\n      name: ${JSON.stringify(join(project, '.smoke/smoke-plugin.js'))}\n`)
+await writeFile(join(profile, 'cordis.patch.yml'), `- id: progress-check\n  config:\n    intervalMs: ${manual ? 60000 : 1000}\n    intervalSteps: 1\n- insert:\n    - id: progress-smoke\n      name: ${JSON.stringify(join(project, '.smoke/smoke-plugin.js'))}\n`)
 console.info('Smoke profile:', profile)
 const child = spawn(process.execPath, ['--import', 'tsx/esm', resolve(harness, 'apps/cli/src/bin.ts'), '--profile', 'smoke', '--patch', resolve(harness, 'apps/web/tests/pin-browse-picker.overlay.yml'), '--no-open', '--port', '0'], {
   cwd: harness, env: { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, stdio: 'inherit',

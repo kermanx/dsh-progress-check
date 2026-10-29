@@ -5,7 +5,7 @@ import { Context } from "@deepseek-ai/cordis";
 /** Deployment-owned cadence, resource limits, and agent selection. */
 interface Config {
   intervalMs: number;
-  toolCallThreshold: number;
+  intervalSteps: number;
   maxConcurrent: number;
   timeoutMs: number;
   maxResponseBytes: number;
@@ -13,7 +13,7 @@ interface Config {
   includeSubagents: boolean;
   onlyWhenVisible: boolean;
 }
-/** Validated defaults; the call threshold is exclusive. */
+/** Validated defaults; both minimum intervals must be met for automatic checks. */
 declare const Config: z<Config>;
 /** Services whose lifetime owns the scheduler. Persistence is verified by awaited flushes. */
 declare const inject: string[];

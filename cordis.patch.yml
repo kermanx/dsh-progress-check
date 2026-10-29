@@ -3,10 +3,10 @@
       name: '@kermanx/dsh-progress-check'
       config:
         intervalMs: 60000
-        toolCallThreshold: 5
-        maxConcurrent: 2
+        intervalSteps: 5
+        maxConcurrent: 1
         timeoutMs: 120000
         maxResponseBytes: 262144
         maxParseRetries: 3
-        includeSubagents: true
+        includeSubagents: false
         onlyWhenVisible: true

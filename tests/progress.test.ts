@@ -3,14 +3,15 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Context } from '@deepseek-ai/cordis'
 import { SessionStore, Session, SessionId, pluginRecordOf } from '@deepseek-ai/dsh-session'
 import * as Jsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
+import * as Progress from '../src/index.ts'
 import { readResult } from '../src/records.ts'
 import { progressDefinition } from '../src/client/definition.ts'
 import { Adapter, deferred, modelReport, report, setup, textChunks, toolChunks } from './fixture.ts'
 
 afterEach(() => vi.useRealTimers())
 function clock() { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] }) }
-async function started(calls = 6, config = {}) {
-  const adapter = new Adapter(); adapter.calls = calls
+async function started(steps = 5, config = {}) {
+  const adapter = new Adapter(); adapter.toolRounds = steps
   const f = await setup(config, adapter)
   onTestFinished(f.close)
   // Automatic generation waits for a page that shows the Session.
@@ -60,7 +61,7 @@ describe('running-session progress checks', () => {
     expect(f.adapter.checks[0]!.messages.at(-1)!.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining("Use the user's language from the conversation") })
   })
 
-  it('generates on demand before the timer and below the call threshold without changing the main request', async () => {
+  it('generates on demand before the timer and below the step interval without changing the main request', async () => {
     const f = await started(1)
     const before = f.agent.session.deriveMessages()
     const result = await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)
@@ -179,10 +180,81 @@ describe('running-session progress checks', () => {
     f.adapter.release.resolve(); await f.agent.whenIdle()
   })
 
-  it('requires strictly more than the configured number of calls', async () => {
-    const f = await started(5)
+  it('waits below the minimum completed-step interval', async () => {
+    const f = await started(4)
     await vi.advanceTimersByTimeAsync(600000)
     expect(f.adapter.checks).toHaveLength(0)
+  })
+
+  it('counts a batch of tool calls as only one completed step', async () => {
+    const adapter = new Adapter(); adapter.toolRounds = 1; adapter.calls = 20
+    const f = await setup({}, adapter)
+    onTestFinished(f.close)
+    clock(); f.watch(); f.start(); await adapter.ready.promise
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(f.events.filter(event => event.type === 'tool/call')).toHaveLength(20)
+    expect(adapter.checks).toHaveLength(0)
+  })
+
+  it('generates exactly at a custom step interval after the time interval', async () => {
+    const f = await started(2, { intervalSteps: 2 })
+    await vi.advanceTimersByTimeAsync(59999)
+    expect(f.adapter.checks).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(1)
+    await f.waitRecords('plugin:progress-check/result')
+    expect(readResult(f.events.find(event => readResult(event) !== undefined)!)?.coveredStepCount).toBe(2)
+    expect(f.adapter.checks).toHaveLength(1)
+  })
+
+  it('generates when steps catch up after the timer, including a step without tools', async () => {
+    const f = await started(4)
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(f.adapter.checks).toHaveLength(0)
+    // Finish the held text-only step, then enter a new running turn.
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    f.adapter.release = deferred(); f.adapter.ready = deferred()
+    f.start(); await f.adapter.ready.promise
+    await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(1)
+    expect(readResult(f.events.find(event => readResult(event) !== undefined)!)?.coveredStepCount).toBe(5)
+  })
+
+  it('restores the successful step watermark across plugin reloads', async () => {
+    const f = await started()
+    await vi.advanceTimersByTimeAsync(60000)
+    await f.waitRecords('plugin:progress-check/result')
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.plugin.dispose()
+    await f.ctx.plugin(Progress, Progress.Config({}))
+    f.adapter.toolRounds = 9
+    f.adapter.release = deferred(); f.adapter.ready = deferred()
+    f.watch(); f.start(); await f.adapter.ready.promise
+    await vi.advanceTimersByTimeAsync(60000)
+    // The first report covered five steps; only four more have completed.
+    expect(f.adapter.checks).toHaveLength(1)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    f.adapter.release = deferred(); f.adapter.ready = deferred()
+    f.start(); await f.adapter.ready.promise
+    await f.waitRecords('plugin:progress-check/result', 2)
+    expect(f.events.flatMap(event => {
+      const result = readResult(event)
+      return result === undefined ? [] : [result.coveredStepCount]
+    })).toEqual([5, 10])
+  })
+
+  it.each([false, true])('includes subagent sessions only when opted in: %s', async (includeSubagents) => {
+    const f = await setup(includeSubagents ? { includeSubagents: true } : {})
+    onTestFinished(f.close)
+    const { agent } = await f.ctx.agents.create({
+      sessionId: SessionId('child'), meta: { origin: 'subagent' },
+      agentOptions: { provider: 'mock', model: 'fixture' },
+    })
+    clock(); f.watch(true, agent.session.id)
+    agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Child task' }] }))
+    await f.adapter.ready.promise
+    await vi.advanceTimersByTimeAsync(60000)
+    if (includeSubagents) await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(includeSubagents ? 1 : 0)
   })
 
   it('accumulates only running time across idle periods', async () => {
@@ -259,7 +331,7 @@ describe('running-session progress checks', () => {
   })
 
   it('can disable immediate format retries while keeping the failed response', async () => {
-    const f = await started(6, { maxParseRetries: 0 })
+    const f = await started(5, { maxParseRetries: 0 })
     f.adapter.answer = textChunks('not JSON')
     expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(false)
     expect(f.adapter.checks).toHaveLength(1)
@@ -284,7 +356,7 @@ describe('running-session progress checks', () => {
   })
 
   it('marks oversized responses and retains only chunks within the byte limit', async () => {
-    const f = await started(6, { maxResponseBytes: 160 })
+    const f = await started(5, { maxResponseBytes: 160 })
     const partial = textChunks('{"progress":').slice(0, 1)
     f.adapter.answer = [...partial, ...textChunks('x'.repeat(200))]
     expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(false)
@@ -330,7 +402,7 @@ describe('running-session progress checks', () => {
     await vi.advanceTimersByTimeAsync(60000)
     await f.ctx.sessions.flush(f.agent.session)
     await vi.advanceTimersByTimeAsync(0)
-    expect(f.events.filter(event => event.type === 'tool/call')).toHaveLength(6)
+    expect(f.events.filter(event => event.type === 'tool/call')).toHaveLength(5)
     expect(f.events.some(event => readResult(event) !== undefined)).toBe(false)
   })
 
@@ -366,8 +438,8 @@ describe('running-session progress checks', () => {
     await f.waitRecords('plugin:progress-check/result')
     expect(f.events.some(event => readResult(event) !== undefined)).toBe(true)
   })
-  it('limits concurrent checks across multiple sessions and drains queued work', async () => {
-    const f = await started(6, { maxConcurrent: 1 })
+  it('defaults to one concurrent check across sessions and drains queued work', async () => {
+    const f = await started()
     f.adapter.checkRelease = deferred()
     const created: SessionId[] = [f.agent.session.id]
     for (const id of ['second', 'third']) {
@@ -376,7 +448,7 @@ describe('running-session progress checks', () => {
       agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Another task' }] }))
     }
     f.watch(true, ...created)
-    await f.adapter.waitForMain(6)
+    await f.adapter.waitForMain(18)
     await vi.advanceTimersByTimeAsync(60000)
     await f.ctx.sessions.flush(f.agent.session)
     await vi.advanceTimersByTimeAsync(0)
@@ -404,7 +476,7 @@ describe('running-session progress checks', () => {
     await f.adapter.ready.promise
     await f.waitRecords('plugin:progress-check/result')
     expect(f.adapter.checks).toHaveLength(1)
-    expect(f.adapter.checks[0]?.messages.filter(message => message.role === 'tool')).toHaveLength(6)
+    expect(f.adapter.checks[0]?.messages.filter(message => message.role === 'tool')).toHaveLength(5)
   })
 
 })

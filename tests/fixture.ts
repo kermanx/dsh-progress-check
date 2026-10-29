@@ -52,12 +52,12 @@ export class Adapter extends LlmAdapter {
   responseFailure: Error | undefined
   answer = textChunks(JSON.stringify(modelReport))
   answers: StreamChunk[][] = []
-  calls = 6
+  calls = 1
   /**
    * Leading main requests per Session that answer with tool calls. Raising it
    * mid-test produces another batch of work for the next cadence interval.
    */
-  toolRounds = 1
+  toolRounds = 5
   activeChecks = 0
   peakChecks = 0
   private mainCounts = new Map<string, number>()
