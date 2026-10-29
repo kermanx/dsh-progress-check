@@ -29,7 +29,7 @@
 
 ## 环境要求
 
-- **DSH 版本**：`0.2.1-rc.3`。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
+- **DSH 版本**：`0.2.2-alpha.2`（已在 master 提交 `daa62cfb6fa` 上验证）。版本不一致时 `dsh plugin add` 会**直接拒绝安装**（不会安装任何内容，命令以非零状态退出）。确需在别的版本上试用，可按命令输出的提示逐版本豁免，风险自负：
 
   ```sh
   dsh plugin --profile web allow-version @kermanx/dsh-progress-check@<插件版本> --dsh-version <DSH 版本> --accept-risk
@@ -166,7 +166,9 @@ pnpm test
 pnpm run build
 ```
 
-`pnpm run smoke:web` 会在隔离环境中启动一次真实 Web 界面自检，用于检查卡片生成与交互；加 `--manual` 可验证手工生成入口。
+`pnpm run smoke:web` 会通过同级 `../deepseek-harness` 的源码 CLI，在临时 profile 中启动真实 Web 界面，用于检查卡片生成与交互；加 `--manual` 可验证手工生成入口。可用 `DSH_SOURCE` 指定另一份已安装依赖并构建的 DSH checkout。
+
+完整的兼容检查需要同级 DSH 源码及其构建产物：发布前运行类型检查、测试、构建和 Web smoke，并提交 `lib/`。本次使用 master 提交 `daa62cfb6fa` 验证。由于该源码仓库为私有仓库，且测试辅助包未完整发布到 npm，公开 CI 只校验提交的构建产物和实际安装包；不会代替完整的本地兼容检查。
 
 ## 许可
 

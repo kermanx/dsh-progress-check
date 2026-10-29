@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 
 const project = fileURLToPath(new URL('../', import.meta.url))
+const harness = resolve(project, process.env.DSH_SOURCE ?? '../deepseek-harness')
 const manual = process.argv.includes('--manual')
 const home = await mkdtemp(join(tmpdir(), 'dsh-progress-smoke-'))
 const profile = join(home, 'profiles/smoke')
@@ -18,8 +19,8 @@ await writeFile(join(profile, 'package.json'), JSON.stringify({
 }) + '\n')
 await writeFile(join(profile, 'cordis.patch.yml'), `- id: progress-check\n  config:\n    intervalMs: ${manual ? 60000 : 1000}\n- insert:\n    - id: progress-smoke\n      name: ${JSON.stringify(join(project, '.smoke/smoke-plugin.js'))}\n`)
 console.info('Smoke profile:', profile)
-const child = spawn('dsh', ['--profile', 'smoke', '--patch', resolve(project, '../deepseek-harness/apps/web/tests/pin-browse-picker.overlay.yml'), '--no-open', '--port', '0'], {
-  cwd: project, env: { ...process.env, DSH_HOME: home }, stdio: 'inherit',
+const child = spawn(process.execPath, ['--import', 'tsx/esm', resolve(harness, 'apps/cli/src/bin.ts'), '--profile', 'smoke', '--patch', resolve(harness, 'apps/web/tests/pin-browse-picker.overlay.yml'), '--no-open', '--port', '0'], {
+  cwd: harness, env: { ...process.env, DSH_HOME: home, DSH_TELEMETRY_DISABLED: '1' }, stdio: 'inherit',
 })
 const stop = () => child.kill('SIGTERM')
 process.on('SIGINT', stop)

@@ -9,31 +9,37 @@ permissions:
   contents: read
 
 jobs:
-  check:
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
 
-      # Local development links the DSH source checkout; CI installs the same
-      # packages from the registry instead.
-      - name: Point linked devDependencies at published DSH packages
-        run: node scripts/ci-registry-deps.mjs --write
+      # The supported DSH master and test-support packages are private/unpublished.
+      # Run full compatibility checks in a local DSH checkout before committing lib/.
+      # Public CI verifies the same prebuilt package distributed by Git and Releases.
+      - name: Check prebuilt entrypoints
+        run: |
+          test -s lib/index.js
+          test -s lib/index.d.ts
+          test -s lib/client.js
+          node --check lib/index.js
+          node --check lib/client.js
 
-      - name: Install
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm run typecheck
-
-      - name: Test
-        run: pnpm test
-
-      - name: Build
-        run: pnpm run build
+      - name: Verify the installable package
+        run: |
+          mkdir -p dist unpacked
+          npm pack --ignore-scripts --pack-destination dist
+          tar -xzf dist/kermanx-dsh-progress-check-*.tgz -C unpacked
+          cd unpacked/package
+          test -s lib/index.js
+          test -s lib/index.d.ts
+          test -s lib/client.js
+          test -s cordis.patch.yml
+          test -s locale/zh.json
+          test -s locale/en.json
+          node --check lib/index.js
+          node --check lib/client.js
