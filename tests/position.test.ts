@@ -41,7 +41,7 @@ it('exposes null until a report arrives and keeps only the latest report in the 
     updatedAt: 20,
     stepsAgo: 0,
     needsRefresh: false,
-    report: { progress: '第一张进展', uncertainties: [], userActions: [] },
+    report: { progress: '第一张进展', uncertainties: [], userActions: [], links: {} },
   })
 
   // Unrelated events keep the exact same view reference so downstream subscribers do not re-render.
@@ -54,7 +54,7 @@ it('exposes null until a report arrives and keeps only the latest report in the 
     updatedAt: 30,
     stepsAgo: 0,
     needsRefresh: false,
-    report: { progress: '第二张进展', uncertainties: [], userActions: [] },
+    report: { progress: '第二张进展', uncertainties: [], userActions: [], links: {} },
   })
 })
 

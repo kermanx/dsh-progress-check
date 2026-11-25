@@ -590,4 +590,19 @@ describe('running-session progress checks', () => {
     expect(f.adapter.checks).toHaveLength(0)
   })
 
+  it('passes previous key links into subsequent progress requests', async () => {
+    const f = await started(5)
+    f.adapter.answer = textChunks(JSON.stringify({
+      ...modelReport,
+      links: { 'PR #9': 'https://github.com/a/b/pull/9' },
+    }))
+    await vi.advanceTimersByTimeAsync(60000)
+    await f.waitRecords('plugin:progress-check/result', 1)
+    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(true)
+    expect(f.adapter.checks[1]?.messages.at(-1)?.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('Previous key links (you may add or remove entries, but do not arbitrarily change existing descriptions): {"PR #9":"https://github.com/a/b/pull/9"}'),
+    })
+  })
+
 })

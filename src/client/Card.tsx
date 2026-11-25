@@ -85,6 +85,7 @@ export function Card({ report, updatedAt, stepsAgo, staleUpdating = false, t, di
   const ageText = showSteps
     ? t(stepsAgo === 1 ? 'stepAgoOne' : 'stepsAgo', { n: String(stepsAgo) })
     : formatAge(updatedAt, now, t)
+  const linkEntries = Object.entries(report.links ?? {})
   return <section className="dsh-progress-check" aria-label={t('aria')} data-stale-updating={staleUpdating ? 'true' : undefined}>
     {staleUpdating && <div className="dsh-progress-check-bar" aria-hidden="true" />}
     <dl>
@@ -100,6 +101,14 @@ export function Card({ report, updatedAt, stepsAgo, staleUpdating = false, t, di
           {question}{' '}
           <button className="dsh-progress-check-reply" type="button" disabled={disabled} onClick={() => onReply(question)}>{t('reply')}</button>
         </div>)}</dd>
+      </>}
+      {linkEntries.length > 0 && <>
+        <dt>{t('links')}</dt>
+        <dd className="dsh-progress-check-links">{linkEntries.map(([desc, url]) => (
+          /^https?:\/\//i.test(url)
+            ? <a key={url} className="dsh-progress-check-link" href={url} target="_blank" rel="noopener noreferrer">{desc}</a>
+            : <span key={url}>{desc}: {url}</span>
+        ))}</dd>
       </>}
     </dl>
     <div className="dsh-progress-check-actions">

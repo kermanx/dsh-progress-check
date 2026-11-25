@@ -2,7 +2,7 @@
 import type { SettingsFormLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 
 export const zh = {
-  progress: '当前进度', uncertainties: '尚未确认', userActions: '需要你确认',
+  progress: '当前进度', uncertainties: '尚未确认', userActions: '需要你确认', links: '重点链接',
   reply: '回复', replyTo: '关于「{question}」：', aria: '任务进展',
   separator: '；',
   generate: '生成进展', generating: '生成中…', generateFailed: '未能生成进展，请重试',
@@ -42,7 +42,7 @@ export const zh = {
 }
 /** English labels for the same surface. */
 export const en: typeof zh = {
-  progress: 'Progress', uncertainties: 'Uncertainties', userActions: 'Needs your input',
+  progress: 'Progress', uncertainties: 'Uncertainties', userActions: 'Needs your input', links: 'Key links',
   reply: 'Reply', replyTo: 'Regarding “{question}”: ', aria: 'Task progress',
   separator: '; ',
   generate: 'Check progress', generating: 'Generating…', generateFailed: 'Could not generate progress. Try again.',

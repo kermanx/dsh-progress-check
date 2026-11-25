@@ -47,6 +47,9 @@ const styles = `
 .dsh-progress-check-actions { display:flex; align-items:center; gap:6px; flex:none; }
 .dsh-progress-check-time { border:0; padding:0; background:none; color:var(--dsw-alias-label-tertiary); font:inherit; font-size:11px; line-height:1.5; font-variant-numeric:tabular-nums; white-space:nowrap; cursor:pointer; }
 .dsh-progress-check-time:focus-visible { outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:2px; }
+.dsh-progress-check-links { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; }
+.dsh-progress-check-link { color:var(--dsw-alias-link); text-decoration:none; text-underline-offset:3px; white-space:nowrap; }
+.dsh-progress-check-link:focus-visible { outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:3px; }
 .dsh-progress-check-reply { border:0; padding:0; margin-left:4px; background:none; color:var(--dsw-alias-link); font:inherit; text-underline-offset:3px; cursor:pointer; }
 .dsh-progress-check-reply:disabled { opacity:.45; cursor:default; }
 .dsh-progress-check-reply:focus-visible { outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:3px; }
@@ -66,6 +69,7 @@ const styles = `
 .dsh-progress-check-settings-reset:focus-visible { outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary)); outline-offset:2px; }
 @media (hover: hover) {
   .dsh-progress-check-time:hover { color:var(--dsw-alias-label-secondary); }
+  .dsh-progress-check-link:hover { text-decoration:underline; }
   .dsh-progress-check-reply:hover { text-decoration:underline; }
   .dsh-progress-check-settings-reset:hover:not(:disabled) { color:var(--dsw-alias-label-primary); }
 }

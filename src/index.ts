@@ -201,10 +201,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         let responseRecorded = false
         let preparedConfig = false
         let stage: FailureStage = 'prepare'
+        const previousLinks = stateOf(entry.agent).latest?.report.links
         let request: StoredRequest = {
           ...snapshot.request,
           messages: [...snapshot.request.messages, { role: 'user', content: [{
-            type: 'text', text: createQuestion(outputLocale(), attempt > 1, reason === 'turn-end' ? 'turn-end' : 'running'),
+            type: 'text', text: createQuestion(outputLocale(), attempt > 1, reason === 'turn-end' ? 'turn-end' : 'running', previousLinks),
           }] }],
         }
         const recordRequest = () => {

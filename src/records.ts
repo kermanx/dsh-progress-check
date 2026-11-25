@@ -10,15 +10,21 @@ export type CheckId = Branded<'ProgressCheckId'>
 /** Detached provider request; cancellation is process-local. */
 export type StoredRequest = Omit<GenerateOptions, 'signal'>
 
+/** Up to 5 key user-facing links as `{ description: url }`. */
+export const linksSchema = z.record(z.string().trim().min(1), z.string().trim().url())
+  .refine(obj => Object.keys(obj).length <= 5, 'at most 5 links')
+
 /** Persisted report text and lists consumed by existing cards. */
 export const reportSchema = z.object({
   progress: z.string().trim().min(1),
   uncertainties: z.array(z.string().trim().min(1)),
   userActions: z.array(z.string().trim().min(1)),
+  links: z.record(z.string().trim().min(1), z.string().trim().min(1)).default({}),
 }).strict()
 /** Validate concise progress lines (1–2 lines) and join them for the durable report format. */
 export const modelReportSchema = reportSchema.extend({
   progress: z.array(z.string().trim().min(1)).min(1).max(2).transform(lines => lines.join('\n')),
+  links: linksSchema.default({}),
 })
 /** Three answers from the auxiliary model call. */
 export type Report = z.infer<typeof reportSchema>

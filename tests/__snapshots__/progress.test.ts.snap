@@ -7,12 +7,13 @@ exports[`running-session progress checks > preserves the main prefix and persist
       "text": "<system>
 Report progress from the conversation. Do not run tools, continue the task, ask externally, or invent plans; report only decided/active work or completed turn outcomes.
 
-Return ONLY raw JSON (string arrays, no fences/extra text; [] is normal when empty):
-{"progress":["{current work or turn outcome}","{optional immediate next step}"],"uncertainties":[],"userActions":[]}
+Return ONLY raw JSON (string arrays and links object, no fences/extra text; [] or {} is normal when empty). For example:
+{"progress":["{current work or turn outcome}"],"uncertainties":[],"userActions":[],"links":{"{short description}":"{url}"}}
 
 - progress: 1–2 ultra-short telegraphic lines (<=15 words or ~25 CJK chars each; fill placeholders without braces). Line 1: active work or turn outcome. Line 2 (omit if done or small): immediate next step or pending follow-up only. Omit repetition, background, overall goal/request, reviewed material, and prior stages.
 - uncertainties: only genuine confusion or very uncertain technical choices. Exclude self-verifiable facts (even unchecked), settled plans, routine work/verification, general risks, and invented or out-of-scope issues.
 - userActions: only high-ROI actions the user can take now (in parallel while running, or follow-up decisions/inputs after turn end); do your own work.
+- links: JSON object {"description":"url"} of up to 5 key URLs the user is likely to open (PRs, frontend/preview URLs, important docs being edited or referenced)—not every URL read. Use {} when none.
 
 Report actions/results, not reading or generic/mechanical steps. State final designs/architecture/approach without rationale or implementation details. Name files/symbols only for essential orientation; never list paths, identifiers, or code. Distinguish verified results from plans; invent no percentages or problems.
 
@@ -36,12 +37,13 @@ exports[`running-session progress checks > retries invalid JSON and invalid fiel
       "text": "<system>
 Report progress from the conversation. Do not run tools, continue the task, ask externally, or invent plans; report only decided/active work or completed turn outcomes.
 
-Return ONLY raw JSON (string arrays, no fences/extra text; [] is normal when empty):
-{"progress":["{current work or turn outcome}","{optional immediate next step}"],"uncertainties":[],"userActions":[]}
+Return ONLY raw JSON (string arrays and links object, no fences/extra text; [] or {} is normal when empty). For example:
+{"progress":["{current work or turn outcome}"],"uncertainties":[],"userActions":[],"links":{"{short description}":"{url}"}}
 
 - progress: 1–2 ultra-short telegraphic lines (<=15 words or ~25 CJK chars each; fill placeholders without braces). Line 1: active work or turn outcome. Line 2 (omit if done or small): immediate next step or pending follow-up only. Omit repetition, background, overall goal/request, reviewed material, and prior stages.
 - uncertainties: only genuine confusion or very uncertain technical choices. Exclude self-verifiable facts (even unchecked), settled plans, routine work/verification, general risks, and invented or out-of-scope issues.
 - userActions: only high-ROI actions the user can take now (in parallel while running, or follow-up decisions/inputs after turn end); do your own work.
+- links: JSON object {"description":"url"} of up to 5 key URLs the user is likely to open (PRs, frontend/preview URLs, important docs being edited or referenced)—not every URL read. Use {} when none.
 
 Report actions/results, not reading or generic/mechanical steps. State final designs/architecture/approach without rationale or implementation details. Name files/symbols only for essential orientation; never list paths, identifiers, or code. Distinguish verified results from plans; invent no percentages or problems.
 

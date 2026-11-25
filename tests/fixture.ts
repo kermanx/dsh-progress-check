@@ -15,7 +15,7 @@ import * as Connection from '@deepseek-ai/dsh-client-connection'
 import { createWebConnectionRpc } from '@deepseek-ai/dsh-client-connection/src/client/rpc.ts'
 import { PROGRESS_CHANNEL } from '../src/protocol.ts'
 
-export const modelReport = { progress: ['正在验证会话保存修复。', '下一步验证旧格式读取和恢复。'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'] }
+export const modelReport = { progress: ['正在验证会话保存修复。', '下一步验证旧格式读取和恢复。'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'], links: {} }
 export const report = { ...modelReport, progress: modelReport.progress.join('\n') }
 export function deferred<T = void>() {
   let resolve!: (value: T) => void

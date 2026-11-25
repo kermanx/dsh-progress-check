@@ -6,7 +6,7 @@ import { en, zh } from '../src/client/locales.ts'
 import type { ProgressKey } from '../src/client/locales.ts'
 import { readResult } from '../src/records.ts'
 
-const report = { progress: '正在完成会话保存修复。\n下一步检查恢复后的会话内容。', uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'] }
+const report = { progress: '正在完成会话保存修复。\n下一步检查恢复后的会话内容。', uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'], links: {} }
 const formatWith = (dict: typeof zh) => (key: ProgressKey, params?: Record<string, string>) => {
   let text = dict[key]
   if (params !== undefined) for (const [k, v] of Object.entries(params)) text = text.replace(`{${k}}`, v)
@@ -94,4 +94,15 @@ it('toggles between relative time and steps ago on click and remembers the choic
 
   render(<Card report={{ ...report, uncertainties: [], userActions: [] }} updatedAt={Date.now()} stepsAgo={4} t={t} disabled={false} onReply={vi.fn()} />)
   expect(screen.getByRole('button', { name: '4 步前' })).toBeTruthy()
+})
+
+it('renders key links when present and omits the section when empty', () => {
+  const { unmount } = render(<Card report={{ ...report, uncertainties: [], userActions: [], links: { 'PR #42': 'https://github.com/org/repo/pull/42' } }} updatedAt={Date.now()} stepsAgo={0} t={t} disabled={false} onReply={vi.fn()} />)
+  expect(screen.getByText('重点链接')).toBeTruthy()
+  const link = screen.getByRole('link', { name: 'PR #42' }) as HTMLAnchorElement
+  expect(link.href).toBe('https://github.com/org/repo/pull/42')
+  unmount()
+
+  render(<Card report={{ ...report, uncertainties: [], userActions: [], links: {} }} updatedAt={Date.now()} stepsAgo={0} t={t} disabled={false} onReply={vi.fn()} />)
+  expect(screen.queryByText('重点链接')).toBeNull()
 })

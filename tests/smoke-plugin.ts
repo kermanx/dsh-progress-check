@@ -38,7 +38,7 @@ class FixtureAdapter extends LlmAdapter {
       })
       if (options.signal?.aborted) return
       const second = (this.calls.get(options.sessionId ?? '') ?? 0) > 2
-      yield { type: 'block-end', index: 0, block: { type: 'text', text: JSON.stringify({ progress: second ? ['验证旧格式读取和恢复中', '下一步检查恢复后的会话内容'] : ['正在验证会话保存修复', '下一步检查旧格式读取'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'] }) } }
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: JSON.stringify({ progress: second ? ['验证旧格式读取和恢复中', '下一步检查恢复后的会话内容'] : ['正在验证会话保存修复', '下一步检查旧格式读取'], uncertainties: ['旧格式应统一迁移还是保留独立兼容层，目前无法确定。'], userActions: ['请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。'], links: { '进展卡片插件仓库': 'https://github.com/kermanx/dsh-progress-check', '本地预览地址': 'http://127.0.0.1:3080' } }) } }
       yield { type: 'usage', usage: { inputTokens: 100, outputTokens: 40, cacheReadTokens: 90 } }
       yield { type: 'finish', reason: { kind: 'stop' } }
       return
