@@ -1,6 +1,6 @@
 /** Periodic auxiliary progress checks for running agents, with durable Session records. */
 import { randomUUID } from 'node:crypto'
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -10,6 +10,9 @@ import { appendPluginRecord, SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-settings'
+// Type-only: `loader/volatile-update`, emitted after a Settings edit commits
+// into this plugin's running configuration references.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { LOCALE_SETTINGS_NAMESPACE } from '@deepseek-ai/dsh-client-locale'
 import { createQuestion } from './prompt.ts'
 import { progressProjection } from './projection.ts'
@@ -20,27 +23,35 @@ import type { ProgressOutcome } from './types.ts'
 import { GENERATE_METHOD, PRESENCE_METHOD, generateRequestSchema, presenceReportSchema } from './protocol.ts'
 import { registerProgressRpc } from './rpc.ts'
 
-/** Deployment-owned cadence, resource limits, and agent selection. */
+/**
+ * Deployment-owned cadence, resource limits, and agent selection. Every field
+ * is volatile, so the Settings service can project the form on the Plugins
+ * page and a saved edit commits into the running references without a reload.
+ */
 export interface Config {
-  intervalMs: number
-  intervalSteps: number
-  maxConcurrent: number
-  timeoutMs: number
-  maxResponseBytes: number
-  maxParseRetries: number
-  includeSubagents: boolean
-  onlyWhenVisible: boolean
+  intervalMs: Volatile<number>
+  intervalSteps: Volatile<number>
+  maxConcurrent: Volatile<number>
+  timeoutMs: Volatile<number>
+  maxResponseBytes: Volatile<number>
+  maxParseRetries: Volatile<number>
+  includeSubagents: Volatile<boolean>
+  onlyWhenVisible: Volatile<boolean>
+  refreshOnTurnEnd: Volatile<boolean>
 }
+/** Plain values the schema accepts for one configuration layer. */
+export type ConfigValues = { [K in keyof Config]: Config[K] extends Volatile<infer V> ? V : never }
 /** Validated defaults; both minimum intervals must be met for automatic checks. */
-export const Config: z<Config> = z.object({
-  intervalMs: z.number().min(1).step(1).default(60000),
-  intervalSteps: z.number().min(1).step(1).default(5),
-  maxConcurrent: z.number().min(1).step(1).default(1),
-  timeoutMs: z.number().min(1).step(1).default(120000),
-  maxResponseBytes: z.number().min(1).step(1).default(262144),
-  maxParseRetries: z.number().min(0).max(3).step(1).default(3),
-  includeSubagents: z.boolean().default(false),
-  onlyWhenVisible: z.boolean().default(true),
+export const Config = z.object({
+  intervalMs: z.number().min(1).step(1).default(60000).volatile(),
+  intervalSteps: z.number().min(1).step(1).default(5).volatile(),
+  maxConcurrent: z.number().min(1).step(1).default(1).volatile(),
+  timeoutMs: z.number().min(1).step(1).default(120000).volatile(),
+  maxResponseBytes: z.number().min(1).step(1).default(262144).volatile(),
+  maxParseRetries: z.number().min(0).max(3).step(1).default(3).volatile(),
+  includeSubagents: z.boolean().default(false).volatile(),
+  onlyWhenVisible: z.boolean().default(true).volatile(),
+  refreshOnTurnEnd: z.boolean().default(false).volatile(),
 })
 /** Services whose lifetime owns the scheduler. Persistence is verified by awaited flushes. */
 export const inject = ['agents', 'sessions', 'sessionProjections', 'llm']
@@ -49,22 +60,29 @@ interface Snapshot {
   request: StoredRequest
   signal: AbortSignal | undefined
   toolCount: number
+  actionToolCount: number
   stepCount: number
   seq: number
 }
+type RequestTemplate = Omit<StoredRequest, 'messages' | 'toolHistory'>
 interface Work {
   agent: Agent
   remaining: number
   startedAt: number | undefined
   timer: ReturnType<typeof setTimeout> | undefined
   due: boolean
+  turnEndDue: boolean
+  template: RequestTemplate | undefined
   snapshot: Snapshot | undefined
   operation: Operation | undefined
   covered: number
+  coveredTools: number
 }
 interface Operation {
   controller: AbortController
   phase: 'queued' | 'running'
+  reason: 'periodic' | 'turn-end' | 'manual'
+  stepCount: number
   promise: Promise<ProgressOutcome>
   resolve(value: ProgressOutcome): void
   cleanup(): void
@@ -93,19 +111,51 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const projection = await ctx.sessionProjections.register(progressProjection)
 
   const stateOf = (agent: Agent) => projection.stateOf(agent.session)
-  const running = (entry: Work) => !stopped && work.get(entry.agent.session.id) === entry && entry.agent.status === 'running'
+  const alive = (entry: Work) => !stopped && work.get(entry.agent.session.id) === entry
+  const running = (entry: Work) => alive(entry) && entry.agent.status === 'running'
+  const eligible = (entry: Work, reason: Operation['reason']) => reason === 'periodic' ? running(entry) : alive(entry)
   // A card is only worth a model call while a foreground page shows the Session.
-  const watched = (entry: Work) => !config.onlyWhenVisible || presence.watched(entry.agent.session.id)
+  const watched = (entry: Work) => !config.onlyWhenVisible.get() || presence.watched(entry.agent.session.id)
   const stopTimer = (entry: Work) => {
     if (entry.timer !== undefined) clearTimeout(entry.timer)
     entry.timer = undefined
     if (entry.startedAt !== undefined) entry.remaining = Math.max(0, entry.remaining - (performance.now() - entry.startedAt))
     entry.startedAt = undefined
   }
-  const pause = (entry: Work) => {
+  const terminate = (entry: Work) => {
     stopTimer(entry)
+    entry.due = false
+    entry.turnEndDue = false
     entry.operation?.controller.abort(new Error('agent stopped working'))
     entry.snapshot = undefined
+  }
+  const pause = (entry: Work) => {
+    stopTimer(entry)
+    if (entry.operation?.reason === 'periodic') entry.operation.controller.abort(new Error('agent stopped working'))
+    if (!entry.turnEndDue && entry.operation?.reason !== 'turn-end' && entry.operation?.reason !== 'manual') {
+      entry.snapshot = undefined
+    }
+  }
+  const buildPostTurnRequest = (entry: Work): StoredRequest | undefined => {
+    const { session } = entry.agent
+    const messages = session.deriveMessages()
+    if (messages.length === 0) return undefined
+    if (entry.template !== undefined) {
+      return {
+        ...structuredClone(entry.template),
+        messages: structuredClone(messages),
+        toolHistory: structuredClone(session.toolHistory()),
+      }
+    }
+    const header = session.requestHeader()
+    if (header === undefined) return undefined
+    return {
+      ...structuredClone(header.config),
+      messages: structuredClone(messages),
+      toolHistory: structuredClone(session.toolHistory()),
+      ...header.tools !== undefined ? { tools: structuredClone(header.tools) } : {},
+      sessionId: session.id,
+    }
   }
   const arm = (entry: Work) => {
     if (!running(entry) || entry.timer !== undefined || entry.due || entry.operation !== undefined) return
@@ -121,20 +171,20 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   const reset = (entry: Work) => {
     entry.due = false
-    entry.remaining = config.intervalMs
+    entry.remaining = config.intervalMs.get()
     arm(entry)
   }
   const attach = (agent: Agent) => {
-    if (work.has(agent.session.id) || (!config.includeSubagents && agent.session.header.origin === 'subagent')) return
+    if (work.has(agent.session.id) || (!config.includeSubagents.get() && agent.session.header.origin === 'subagent')) return
     const state = stateOf(agent)
-    const entry: Work = { agent, remaining: config.intervalMs, startedAt: undefined, timer: undefined, due: false, snapshot: undefined, operation: undefined, covered: state.covered }
+    const entry: Work = { agent, remaining: config.intervalMs.get(), startedAt: undefined, timer: undefined, due: false, turnEndDue: false, template: undefined, snapshot: undefined, operation: undefined, covered: state.covered, coveredTools: state.coveredActionTools }
     work.set(agent.session.id, entry)
     arm(entry)
   }
   const flush = async (entry: Work) => {
     if (!await ctx.sessions.flush(entry.agent.session)) throw new Error('progress-check requires durable session persistence')
   }
-  const check = async (entry: Work, snapshot: Snapshot, controller: AbortController): Promise<ProgressOutcome> => {
+  const check = async (entry: Work, snapshot: Snapshot, controller: AbortController, reason: Operation['reason']): Promise<ProgressOutcome> => {
     const id = randomUUID() as CheckId
     const { session } = entry.agent
     const abort = () => controller.abort(snapshot.signal?.reason)
@@ -154,7 +204,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         let request: StoredRequest = {
           ...snapshot.request,
           messages: [...snapshot.request.messages, { role: 'user', content: [{
-            type: 'text', text: createQuestion(outputLocale(), attempt > 1),
+            type: 'text', text: createQuestion(outputLocale(), attempt > 1, reason === 'turn-end' ? 'turn-end' : 'running'),
           }] }],
         }
         const recordRequest = () => {
@@ -196,7 +246,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           for await (const chunk of prepared.stream({ ...request, signal: controller.signal })) {
             controller.signal.throwIfAborted()
             bytes += Buffer.byteLength(JSON.stringify(chunk), 'utf8')
-            if (bytes > config.maxResponseBytes) {
+            if (bytes > config.maxResponseBytes.get()) {
               truncated = true
               throw new Error('progress-check response exceeded maxResponseBytes')
             }
@@ -206,7 +256,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             if (chunk.type === 'finish') finished = true
           }
           controller.signal.throwIfAborted()
-          if (!running(entry)) throw new Error('agent stopped working')
+          if (!eligible(entry, reason)) throw new Error('agent stopped working')
           if (!finished || assembler.finish.kind !== 'stop') throw new Error(`progress-check did not finish normally (${assembler.finish.kind})`)
           stage = 'persist'
           recordResponse()
@@ -222,10 +272,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           })
           await flush(entry)
           entry.covered = snapshot.stepCount
+          entry.coveredTools = snapshot.actionToolCount
           return { ok: true, seq }
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : String(error)
-          const retryable = stage === 'parse'
+          const retryable = stage === 'parse' && reason === 'turn-end'
           if (ctx.sessions.get(session.id) !== session) return { ok: false, message }
           try {
             if (!requestRecorded) recordRequest()
@@ -241,7 +292,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             return { ok: false, message }
           }
           if (!controller.signal.aborted) ctx.logger.warn(`progress-check ${id}, attempt ${attempt}, ${stage}: ${message}`)
-          if (!retryable || attempt > config.maxParseRetries || controller.signal.aborted || !running(entry)) return { ok: false, message }
+          if (!retryable || attempt > config.maxParseRetries.get() || controller.signal.aborted || !eligible(entry, reason)) return { ok: false, message }
         }
       }
     } finally {
@@ -258,12 +309,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     reset(entry)
     pump()
   }
-  const queue = (entry: Work, signal?: AbortSignal): Operation => {
+  const queue = (entry: Work, reason: Operation['reason'], stepCount: number, signal?: AbortSignal): Operation => {
     stopTimer(entry)
     entry.due = false
+    entry.turnEndDue = false
     const controller = new AbortController()
     const completion = Promise.withResolvers<ProgressOutcome>()
-    const timeout = setTimeout(() => controller.abort(new Error('progress-check timed out')), config.timeoutMs)
+    const timeout = setTimeout(() => controller.abort(new Error('progress-check timed out')), config.timeoutMs.get())
     timeout.unref?.()
     const abortCaller = () => controller.abort(signal?.reason)
     const abortQueued = () => {
@@ -272,7 +324,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       })
     }
     const operation: Operation = {
-      controller, phase: 'queued', promise: completion.promise, resolve: completion.resolve,
+      controller, phase: 'queued', reason, stepCount, promise: completion.promise, resolve: completion.resolve,
       cleanup: () => {
         clearTimeout(timeout)
         signal?.removeEventListener('abort', abortCaller)
@@ -289,34 +341,84 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   function pump(): void {
     if (stopped) return
     for (const entry of work.values()) {
-      if (!running(entry) || entry.operation?.phase === 'running') continue
-      if (entry.operation === undefined && !entry.due) continue
+      if (!alive(entry) || entry.operation?.phase === 'running') continue
       const snapshot = entry.snapshot
       if (snapshot === undefined) continue
+      let reason: Operation['reason'] | undefined = entry.operation?.reason
       if (entry.operation === undefined) {
-        if (snapshot.stepCount - entry.covered < config.intervalSteps) continue
-        // Nobody is looking: hold the due report instead of spending a model call
-        // on a card no page shows, and let a later presence report resume it.
-        if (!watched(entry)) continue
+        if (entry.turnEndDue) {
+          const state = stateOf(entry.agent)
+          if (!config.refreshOnTurnEnd.get() || state.stepCount <= entry.covered || state.actionToolCount <= entry.coveredTools) {
+            entry.turnEndDue = false
+            continue
+          }
+          // Nobody is looking: hold the due report until a page shows the Session.
+          if (!watched(entry)) continue
+          reason = 'turn-end'
+        } else {
+          if (!running(entry) || !entry.due) continue
+          if (snapshot.stepCount - entry.covered < config.intervalSteps.get()) continue
+          // Nobody is looking: hold the due report instead of spending a model call
+          // on a card no page shows, and let a later presence report resume it.
+          if (!watched(entry)) continue
+          reason = 'periodic'
+        }
       }
-      if (active >= config.maxConcurrent) break
-      const operation = entry.operation ?? queue(entry)
+      if (active >= config.maxConcurrent.get()) break
+      const operation = entry.operation ?? queue(entry, reason!, snapshot.stepCount)
       operation.phase = 'running'
       active++
       // Defer record writes beyond the Session's synchronous event publication.
-      void Promise.resolve().then(() => check(entry, snapshot, operation.controller)).then(
+      void Promise.resolve().then(() => check(entry, snapshot, operation.controller, operation.reason)).then(
         outcome => settle(entry, operation, outcome),
         (error: unknown) => settle(entry, operation, { ok: false, message: String(error) }),
       )
     }
   }
 
+  // Volatile fields commit into the running references without remounting.
+  // Re-apply the two values captured by attach() and let the rest be read live.
+  let intervalMs = config.intervalMs.get()
+  let includeSubagents = config.includeSubagents.get()
+  ctx.on('loader/volatile-update', () => {
+    const nextInterval = config.intervalMs.get()
+    if (nextInterval !== intervalMs) {
+      intervalMs = nextInterval
+      for (const entry of work.values()) {
+        if (entry.operation !== undefined || entry.due || entry.turnEndDue) continue
+        stopTimer(entry)
+        entry.remaining = nextInterval
+        arm(entry)
+      }
+    }
+    const nextInclude = config.includeSubagents.get()
+    if (nextInclude !== includeSubagents) {
+      includeSubagents = nextInclude
+      if (nextInclude) for (const agent of ctx.agents.list()) attach(agent)
+      else {
+        for (const [id, entry] of work) {
+          if (entry.agent.session.header.origin !== 'subagent') continue
+          terminate(entry)
+          work.delete(id)
+        }
+      }
+    }
+    pump()
+  })
+  // This plugin renders its configuration itself on the Plugins page, so no
+  // client should build an automatic page from the schema.
+  ctx.inject(['settings'], (scope) => {
+    scope.effect(() => scope.settings.configure({ auto: false }, ctx.fiber), 'progress-check: configuration page policy')
+  })
+
   ctx.provide('progressCheck', {
     generate: (sessionId, signal) => {
       const entry = work.get(sessionId)
-      if (entry === undefined || !running(entry)) return Promise.resolve({ ok: false, message: 'progress-check requires a running session' })
+      if (entry === undefined || (!running(entry) && entry.operation === undefined)) {
+        return Promise.resolve({ ok: false, message: 'progress-check requires a running session' })
+      }
       if (signal.aborted) return Promise.resolve({ ok: false, message: 'progress-check canceled' })
-      const operation = entry.operation ?? queue(entry, signal)
+      const operation = entry.operation ?? queue(entry, 'manual', entry.snapshot?.stepCount ?? stateOf(entry.agent).stepCount, signal)
       pump()
       return operation.promise
     },
@@ -358,20 +460,39 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   ctx.on('agent/disposed', ({ agent }) => {
     const entry = work.get(agent.session.id)
     if (entry === undefined) return
-    pause(entry)
+    terminate(entry)
     work.delete(agent.session.id)
   }, { global: true })
   ctx.on('session/event', (session, event) => {
     const entry = work.get(session.id)
-    if (entry !== undefined && ('surfaceOp' in event && event.surfaceOp !== undefined)) entry.snapshot = undefined
+    if (entry === undefined || !alive(entry)) return
+    if ('surfaceOp' in event && event.surfaceOp !== undefined) {
+      entry.turnEndDue = false
+      entry.snapshot = undefined
+    }
+    if (event.type === 'turn/end') {
+      if (!config.refreshOnTurnEnd.get()) return
+      const state = stateOf(entry.agent)
+      if (state.actionToolCount <= entry.coveredTools || state.stepCount <= entry.covered) return
+      if (entry.operation !== undefined && entry.operation.stepCount >= state.stepCount) return
+      const request = buildPostTurnRequest(entry)
+      if (request === undefined) return
+      entry.snapshot = { request, signal: undefined, toolCount: state.toolCount, actionToolCount: state.actionToolCount, stepCount: state.stepCount, seq: state.seq }
+      entry.turnEndDue = true
+      if (entry.operation !== undefined && entry.operation.stepCount < state.stepCount) {
+        entry.operation.controller.abort(new Error('superseded by turn end'))
+      }
+      pump()
+    }
   }, { global: true })
   ctx.on('llm/stream', (options: GenerateOptions, next) => {
     if (isAgentLoopRequest(options) && options.sessionId !== undefined) {
       const entry = work.get(options.sessionId)
       if (entry !== undefined && running(entry)) {
-        const { signal, ...request } = options
+        const { signal, messages: _messages, toolHistory: _toolHistory, ...template } = options
         const state = stateOf(entry.agent)
-        entry.snapshot = { request: structuredClone(request), signal, toolCount: state.toolCount, stepCount: state.stepCount, seq: state.seq }
+        entry.template = structuredClone(template)
+        entry.snapshot = { request: structuredClone({ ...template, messages: options.messages, ...options.toolHistory === undefined ? {} : { toolHistory: options.toolHistory } }), signal, toolCount: state.toolCount, actionToolCount: state.actionToolCount, stepCount: state.stepCount, seq: state.seq }
         pump()
       }
     }
@@ -379,7 +500,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }, { global: true, prepend: true })
   ctx.effect(() => () => {
     stopped = true
-    for (const entry of work.values()) pause(entry)
+    for (const entry of work.values()) terminate(entry)
     work.clear()
     presence.clear()
     return Promise.allSettled([...pending]).then(() => {})

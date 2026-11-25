@@ -1,65 +1,77 @@
 import { expect, it } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
-import type { SessionLiveEventEntry } from '@deepseek-ai/dsh-api-session-controller/client'
-import { ConversationNodeAssembler } from '@deepseek-ai/dsh-client-ui-conversation/src/client/conversation/assembler.ts'
-import { chatViewDefinition } from '@deepseek-ai/dsh-client-ui-chat/src/client/conversation-nodes/chat-snapshot-builder.ts'
-import { messageDefinition } from '@deepseek-ai/dsh-client-ui-chat/src/client/conversation-nodes/message.ts'
-import { progressDefinition } from '../src/client/definition.ts'
-import type { CheckId, Report } from '../src/records.ts'
+import type { SessionEvent, SessionHeader } from '@deepseek-ai/dsh-session'
+import { SessionLogOffset } from '@deepseek-ai/dsh-session'
+import { isActionToolCall, progressProjection } from '../src/projection.ts'
+import type { CheckId } from '../src/records.ts'
 
-function message(seq: number, text: string): SessionLiveEventEntry {
-  return { type: 'event', event: {
+const SESSION = SessionId('position-test')
+const HEADER: SessionHeader = { id: SESSION, createdAt: 0 }
+
+function userEvent(seq: number, text: string): SessionEvent {
+  return {
     type: 'user/message', seq: SessionSeq(seq), time: seq, surfaceOp: 'append',
     data: createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] }),
-  } }
+  }
 }
 
-function result(seq: number, id: string, progress: string): SessionLiveEventEntry {
-  return { type: 'event', event: {
+function resultEvent(seq: number, id: string, progress: string, sessionId: SessionId = SESSION): SessionEvent {
+  return {
     type: 'plugin:progress-check/result', seq: SessionSeq(seq), time: seq, ignorable: true,
     data: {
-      version: 1, id: id as CheckId, sessionId: SessionId('position-test'),
-      contextSeq: 11, coveredToolCount: 6, blocks: [],
+      version: 1, id: id as CheckId, sessionId,
+      contextSeq: 11, coveredToolCount: 6, coveredStepCount: 5, blocks: [],
       report: { progress, uncertainties: [], userActions: [] },
     },
-  } }
+  }
 }
 
-function assemble(events: SessionLiveEventEntry[]) {
-  const assembler = new ConversationNodeAssembler({
-    entries: () => [messageDefinition, progressDefinition], fallbackEntry: () => undefined,
-  }, { entries: () => [chatViewDefinition] })
-  assembler.replaceWindow(events, false)
-  assembler.activateTarget('chat')
-  return assembler
-}
+it('exposes null until a report arrives and keeps only the latest report in the wire view', () => {
+  let state = progressProjection.init(HEADER, SessionLogOffset(0))
+  expect(progressProjection.wire!.view(state)).toBeNull()
 
-function order(assembler: ConversationNodeAssembler) {
-  assembler.flush()
-  const snapshot = assembler.get('chat')!
-  return snapshot.order.map(key => {
-    const node = snapshot.nodes.get(key)!
-    return node.kind === 'progress-check' ? (node.data as Report).progress : node.kind
+  state = progressProjection.apply(state, userEvent(10, '生成前的上下文'))
+  expect(progressProjection.wire!.view(state)).toBeNull()
+
+  state = progressProjection.apply(state, resultEvent(20, 'report-one', '第一张进展'))
+  const firstView = progressProjection.wire!.view(state)
+  expect(firstView).toEqual({
+    id: 'report-one',
+    updatedAt: 20,
+    stepsAgo: 0,
+    needsRefresh: false,
+    report: { progress: '第一张进展', uncertainties: [], userActions: [] },
   })
-}
 
-it('inserts a completed report at its request context, before messages received while generating', () => {
-  const before = [message(10, '生成前的上下文'), message(20, '生成期间新增的消息')]
-  const completed = result(30, 'report-one', '第一张进展')
-  const live = assemble(before)
-  expect(order(live)).toEqual(['user', 'user'])
-  live.append(completed)
-  expect(order(live)).toEqual(['user', '第一张进展', 'user'])
-  expect(order(assemble([...before, completed]))).toEqual(order(live))
+  // Unrelated events keep the exact same view reference so downstream subscribers do not re-render.
+  state = progressProjection.apply(state, userEvent(25, '之后的普通消息'))
+  expect(progressProjection.wire!.view(state)).toBe(firstView)
+
+  state = progressProjection.apply(state, resultEvent(30, 'report-two', '第二张进展'))
+  expect(progressProjection.wire!.view(state)).toEqual({
+    id: 'report-two',
+    updatedAt: 30,
+    stepsAgo: 0,
+    needsRefresh: false,
+    report: { progress: '第二张进展', uncertainties: [], userActions: [] },
+  })
 })
 
-it('keeps reports about the same context in generation order after reload', () => {
-  const events = [message(10, '生成前的上下文'), message(20, '之后的新消息'),
-    result(30, 'z-first', '第一张进展'), result(40, 'a-second', '第二张进展')]
-  const live = assemble(events.slice(0, 2))
-  live.append(events[2]!)
-  live.append(events[3]!)
-  expect(order(live)).toEqual(['user', '第一张进展', '第二张进展', 'user'])
-  expect(order(assemble(events))).toEqual(order(live))
+it('ignores inherited pre-fork reports and reports from other sessions', () => {
+  let state = progressProjection.init(HEADER, SessionLogOffset(20))
+  state = progressProjection.apply(state, resultEvent(10, 'inherited', '父会话旧进展'))
+  state = progressProjection.apply(state, resultEvent(30, 'foreign', '其他会话进展', SessionId('other-session')))
+  expect(progressProjection.wire!.view(state)).toBeNull()
+})
+
+it('excludes read/grep/glob and read-only bash commands from action tool calls', () => {
+  expect(isActionToolCall('read', '{}')).toBe(false)
+  expect(isActionToolCall('grep', '{}')).toBe(false)
+  expect(isActionToolCall('glob', '{}')).toBe(false)
+  expect(isActionToolCall('bash', JSON.stringify({ command: 'ls -la && cat package.json' }))).toBe(false)
+  expect(isActionToolCall('bash', JSON.stringify({ command: 'cat a.txt | head -n 5' }))).toBe(false)
+  expect(isActionToolCall('bash', JSON.stringify({ command: 'echo hi > out.txt' }))).toBe(true)
+  expect(isActionToolCall('bash', JSON.stringify({ command: 'pnpm test' }))).toBe(true)
+  expect(isActionToolCall('edit', '{}')).toBe(true)
 })

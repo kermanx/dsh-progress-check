@@ -1,5 +1,6 @@
-/** One immediate progress action beside the running clock. */
+/** One immediate progress icon action on the floating card. */
 import { useEffect, useRef, useState } from 'react'
+import { Button, IconRefreshOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 
 /** Session-bound generation and shell-owned failure reporting. */
@@ -11,7 +12,7 @@ export interface GenerateActionProps extends PropsLocale<'progressCheck'> {
 /**
  * Keep one pending click and cancel its request when this Session's action unmounts.
  * @param props - locale, authenticated generator, and persistent failure reporter.
- * @returns a plain text button with an in-place pending label.
+ * @returns an icon button with a tooltip and in-place pending state.
  */
 export function GenerateAction({ t, generate, onFailure }: GenerateActionProps) {
   const [busy, setBusy] = useState(false)
@@ -35,6 +36,18 @@ export function GenerateAction({ t, generate, onFailure }: GenerateActionProps) 
       }
     }
   }
-  return <button type="button" className="dsh-progress-check-generate" disabled={busy}
-    aria-busy={busy} onClick={() => { void run() }}>{t(busy ? 'generating' : 'generate')}</button>
+  const label = t(busy ? 'generating' : 'generate')
+  return (
+    <Tooltip label={label} side="top" align="end" portal>
+      <Button
+        size="sm"
+        className="dsh-progress-check-generate"
+        aria-label={label}
+        aria-busy={busy}
+        disabled={busy}
+        onClick={() => { void run() }}
+        icon={<IconRefreshOutlineRegular />}
+      />
+    </Tooltip>
+  )
 }

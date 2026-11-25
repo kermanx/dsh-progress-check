@@ -9,12 +9,15 @@ importers:
   .:
     dependencies:
       zod:
-        specifier: 4.4.3
-        version: 4.4.3
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: link:../deepseek-harness/vendor/cordis
         version: link:../deepseek-harness/vendor/cordis
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: link:../deepseek-harness/vendor/loader
+        version: link:../deepseek-harness/vendor/loader
       '@deepseek-ai/dsh-agent':
         specifier: link:../deepseek-harness/packages/core/agent
         version: link:../deepseek-harness/packages/core/agent
@@ -48,6 +51,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-layout':
         specifier: link:../deepseek-harness/packages/client/ui-layout
         version: link:../deepseek-harness/packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-plugin-manager':
+        specifier: link:../deepseek-harness/packages/client/ui-plugin-manager
+        version: link:../deepseek-harness/packages/client/ui-plugin-manager
       '@deepseek-ai/dsh-client-ui-primitives':
         specifier: link:../deepseek-harness/packages/client/ui-primitives
         version: link:../deepseek-harness/packages/client/ui-primitives
@@ -57,6 +63,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-session':
         specifier: link:../deepseek-harness/packages/client/ui-session
         version: link:../deepseek-harness/packages/client/ui-session
+      '@deepseek-ai/dsh-client-ui-settings':
+        specifier: link:../deepseek-harness/packages/client/ui-settings
+        version: link:../deepseek-harness/packages/client/ui-settings
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: link:../deepseek-harness/packages/client/ui-slots
         version: link:../deepseek-harness/packages/client/ui-slots
@@ -1105,8 +1114,8 @@ packages:
   xmlchars@2.2.0:
     resolution: {integrity: sha512-JZnDKK8B0RCDw84FNdDAIpZK+JuJw+s7Lz8nksI7SIuU3UXJJslUthsi+uWBUYOwPFwW7W7PRLRfUKpxjtjFCw==}
 
-  zod@4.4.3:
-    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
 
 snapshots:
 
@@ -1901,4 +1910,4 @@ snapshots:
 
   xmlchars@2.2.0: {}
 
-  zod@4.4.3: {}
+  zod@4.6.6: {}

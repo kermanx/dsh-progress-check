@@ -48,41 +48,45 @@
     "client": {
       "platform": "web",
       "inject": [
-        "@deepseek-ai/dsh-client-ui-chat",
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-connection"
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-settings"
       ]
     }
   },
   "license": "MIT",
   "dependencies": {
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.6-alpha.1",
-    "@deepseek-ai/schemastery": "3.18.6-alpha.1",
-    "@deepseek-ai/dsh-agent": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-session": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-llm": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-session-projection": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-brand": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-chat": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-conversation": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-session": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-locale": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-api-session-controller": "0.2.2-alpha.2",
+    "@deepseek-ai/cordis": "4.1.0",
+    "@deepseek-ai/schemastery": "3.19.0",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-session-projection": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-brand": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-chat": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-locale": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.2-rc.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@deepseek-ai/dsh-client-connection": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-store": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-client-ui-layout": "0.2.2-alpha.2",
-    "@deepseek-ai/dsh-settings": "0.2.2-alpha.2"
+    "@deepseek-ai/dsh-client-connection": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-store": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.2-rc.5",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.2-rc.5",
+    "@deepseek-ai/cordis-plugin-loader": "1.1.0"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/cordis": {
@@ -147,6 +151,15 @@
     },
     "@deepseek-ai/dsh-settings": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-plugin-manager": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/cordis-plugin-loader": {
+      "optional": true
     }
   },
   "devDependencies": {
@@ -187,11 +200,14 @@
     "@deepseek-ai/dsh-client-ui-primitives": "link:../deepseek-harness/packages/client/ui-primitives",
     "@deepseek-ai/dsh-client-ui-layout": "link:../deepseek-harness/packages/client/ui-layout",
     "@deepseek-ai/dsh-settings": "link:../deepseek-harness/packages/settings/settings",
-    "@deepseek-ai/dsh-tool-testkit": "link:../deepseek-harness/packages/test-support/tool-testkit"
+    "@deepseek-ai/dsh-tool-testkit": "link:../deepseek-harness/packages/test-support/tool-testkit",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "link:../deepseek-harness/packages/client/ui-plugin-manager",
+    "@deepseek-ai/dsh-client-ui-settings": "link:../deepseek-harness/packages/client/ui-settings",
+    "@deepseek-ai/cordis-plugin-loader": "link:../deepseek-harness/vendor/loader"
   },
   "packageManager": "pnpm@10.16.1",
   "author": "kermanx",
   "engines": {
-    "dsh": "0.2.2-alpha.2"
+    "dsh": "^0.2.2-rc.5"
   }
 }

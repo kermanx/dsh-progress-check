@@ -1,19 +1,11 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`keeps only the progress summary when collapsed and can expand while reply is disabled 1`] = `
-"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="false"><dl id=":ra:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
-正在验证旧格式读取和恢复。
-下一步检查恢复后的会话内容。</dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="展开本会话的全部进展卡片" aria-expanded="false" aria-controls=":ra:"><span class="_icon_f52afc"><svg width="14" height="14" data-icon="dsw-icon-chevron-down-outline-regular" aria-hidden="true"><use href="#dsw-icon-chevron-down-outline-regular"></use></svg></span></button></section>"
-`;
-
 exports[`omits empty answers and the reply action when there is nothing for the user to do 1`] = `
-"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="true"><dl id=":r2:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
-正在验证旧格式读取和恢复。
-下一步检查恢复后的会话内容。</dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="折叠本会话的全部进展卡片" aria-expanded="true" aria-controls=":r2:"><span class="_icon_f52afc"><svg width="14" height="14" data-icon="dsw-icon-chevron-up-outline-regular" aria-hidden="true"><use href="#dsw-icon-chevron-up-outline-regular"></use></svg></span></button></section>"
+"<section class="dsh-progress-check" aria-label="任务进展"><dl><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
+下一步检查恢复后的会话内容。</dd></dl><div class="dsh-progress-check-actions"><button type="button" class="dsh-progress-check-time" aria-pressed="false" title="11/15/2023, 6:13:20 AM">&lt;1 分钟前</button></div></section>"
 `;
 
-exports[`shows the three answers when expanded and puts Reply beside its question 1`] = `
-"<section class="dsh-progress-check" aria-label="任务进展" data-expanded="true"><dl id=":r0:"><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
-正在验证旧格式读取和恢复。
-下一步检查恢复后的会话内容。</dd><dt>尚未确认</dt><dd>旧格式应统一迁移还是保留独立兼容层，目前无法确定。</dd><dt>需要你确认</dt><dd><div>请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。 <button class="dsh-progress-check-reply" type="button">回复</button></div></dd></dl><button type="button" class="_button_f52afc _ghost_f52afc _sm_f52afc dsh-progress-check-toggle" aria-label="折叠本会话的全部进展卡片" aria-expanded="true" aria-controls=":r0:"><span class="_icon_f52afc"><svg width="14" height="14" data-icon="dsw-icon-chevron-up-outline-regular" aria-hidden="true"><use href="#dsw-icon-chevron-up-outline-regular"></use></svg></span></button></section>"
+exports[`shows the three answers, stable age label, and puts Reply beside its question 1`] = `
+"<section class="dsh-progress-check" aria-label="任务进展"><dl><dt>当前进度</dt><dd class="dsh-progress-check-progress">正在完成会话保存修复。
+下一步检查恢复后的会话内容。</dd><dt>尚未确认</dt><dd>旧格式应统一迁移还是保留独立兼容层，目前无法确定。</dd><dt>需要你确认</dt><dd><div>请并行确认仍在使用的旧格式版本范围，帮助缩小兼容验证范围。 <button class="dsh-progress-check-reply" type="button">回复</button></div></dd></dl><div class="dsh-progress-check-actions"><button type="button" class="dsh-progress-check-time" aria-pressed="false" title="11/15/2023, 6:13:20 AM">&lt;1 分钟前</button></div></section>"
 `;

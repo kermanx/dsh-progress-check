@@ -3,6 +3,11 @@ import { z } from 'zod'
 
 /** Connection owns authentication, correlation, transport, and cancellation. */
 export const PROGRESS_CHANNEL = '/api'
+/**
+ * Profile entry id of this plugin's row, as `cordis.patch.yml` declares it.
+ * The Settings service keys one configuration form by this id.
+ */
+export const PROGRESS_ENTRY_ID = 'progress-check'
 /** The sole generation operation on this channel. */
 export const GENERATE_METHOD = 'progress-check/generate'
 /** Untrusted browser input; only the target Session may be chosen. */

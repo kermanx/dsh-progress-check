@@ -10,3 +10,4 @@
         maxParseRetries: 3
         includeSubagents: false
         onlyWhenVisible: true
+        refreshOnTurnEnd: false

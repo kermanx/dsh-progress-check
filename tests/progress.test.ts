@@ -5,7 +5,6 @@ import { SessionStore, Session, SessionId, pluginRecordOf } from '@deepseek-ai/d
 import * as Jsonl from '@deepseek-ai/dsh-session-persistence-jsonl'
 import * as Progress from '../src/index.ts'
 import { readResult } from '../src/records.ts'
-import { progressDefinition } from '../src/client/definition.ts'
 import { Adapter, deferred, modelReport, report, setup, textChunks, toolChunks } from './fixture.ts'
 
 afterEach(() => vi.useRealTimers())
@@ -25,7 +24,7 @@ describe('running-session progress checks', () => {
     const f = await started()
     let preference = 'zh'
     // This service fixture supplies only the descriptor reader used by the plugin.
-    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference } }] })
+    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference } }], configure: () => () => {} })
     await vi.advanceTimersByTimeAsync(60000)
     await f.waitRecords('plugin:progress-check/result')
     const first = f.adapter.checks[0]!.messages.at(-1)!.content[0]!
@@ -43,10 +42,11 @@ describe('running-session progress checks', () => {
   })
 
   it('keeps the selected language in format retries and supports registered language tags', async () => {
-    const f = await started()
-    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference: 'ja' } }] })
+    const f = await started(1, { refreshOnTurnEnd: true })
+    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: { preference: 'ja' } }], configure: () => () => {} })
     f.adapter.answers = [textChunks('invalid JSON'), textChunks(JSON.stringify(modelReport))]
-    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(true)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/result')
     expect(f.adapter.checks).toHaveLength(2)
     for (const request of f.adapter.checks) {
       expect(request.messages.at(-1)!.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('DSH output language is "ja"') })
@@ -56,7 +56,7 @@ describe('running-session progress checks', () => {
 
   it('uses the conversation language when no explicit DSH selection is saved', async () => {
     const f = await started()
-    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: {} }] })
+    f.ctx.provide('settings', { describe: () => [{ ns: 'locale', value: {} }], configure: () => () => {} })
     expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(true)
     expect(f.adapter.checks[0]!.messages.at(-1)!.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining("Use the user's language from the conversation") })
   })
@@ -164,7 +164,13 @@ describe('running-session progress checks', () => {
     const restored = Session.create(SessionId('progress-test'), events, f.handle.header, f.handle.inheritedEventCount)
     expect(restored.deriveMessages()).toEqual(before)
     const saved = events.find(event => readResult(event) !== undefined)!
-    expect(progressDefinition.match(saved)).toMatchObject({ role: 'start' })
+    expect(f.ctx.sessionProjections.snapshot(f.agent.session).values['progress-check']).toEqual({
+      id: readResult(saved)!.id,
+      updatedAt: saved.time,
+      stepsAgo: 0,
+      needsRefresh: false,
+      report,
+    })
     expect(saved).toMatchObject({ ignorable: true })
     const reader = new Context()
     await reader.plugin(SessionStore)
@@ -225,7 +231,7 @@ describe('running-session progress checks', () => {
     await f.waitRecords('plugin:progress-check/result')
     f.adapter.release.resolve(); await f.agent.whenIdle()
     await f.plugin.dispose()
-    await f.ctx.plugin(Progress, Progress.Config({}))
+    await f.ctx.plugin(Progress)
     f.adapter.toolRounds = 9
     f.adapter.release = deferred(); f.adapter.ready = deferred()
     f.watch(); f.start(); await f.adapter.ready.promise
@@ -258,12 +264,23 @@ describe('running-session progress checks', () => {
   })
 
   it('accumulates only running time across idle periods', async () => {
-    const f = await started()
+    const f = await setup()
+    onTestFinished(f.close)
+    const entered = deferred()
+    const reject = deferred()
+    let rejectOnce = true
+    f.ctx.on('agent/pre-step', async (_payload, next) => {
+      if (!rejectOnce) return next()
+      rejectOnce = false
+      entered.resolve()
+      await reject.promise
+      return { kind: 'reject' }
+    }, { global: true })
+    clock(); f.watch(); f.start(); await entered.promise
     await vi.advanceTimersByTimeAsync(20000)
-    f.adapter.release.resolve(); await f.agent.whenIdle()
+    reject.resolve(); await f.agent.whenIdle()
     await vi.advanceTimersByTimeAsync(900000)
     expect(f.adapter.checks).toHaveLength(0)
-    f.adapter.release = deferred(); f.adapter.ready = deferred()
     f.start(); await f.adapter.ready.promise
     await vi.advanceTimersByTimeAsync(39999)
     expect(f.adapter.checks).toHaveLength(0)
@@ -273,15 +290,16 @@ describe('running-session progress checks', () => {
     expect(f.adapter.checks).toHaveLength(1)
   })
 
-  it('retries invalid JSON and invalid fields, preserving each attempt for debugging', async () => {
-    const f = await started()
+  it('retries invalid JSON and invalid fields on turn end, preserving each attempt for debugging', async () => {
+    const f = await started(1, { refreshOnTurnEnd: true })
     const before = f.agent.session.deriveMessages()
     const badJson = 'not JSON'
     const badFields = JSON.stringify({ ...modelReport, userActions: '错误类型' })
     f.adapter.answers = [textChunks(badJson), textChunks(badFields)]
-    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(true)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/result')
     expect(f.adapter.checks).toHaveLength(3)
-    expect(f.agent.session.deriveMessages()).toEqual(before)
+    expect(f.agent.session.deriveMessages()).not.toEqual(before)
     const saved = (await f.handle.read()).events.map(pluginRecordOf)
     const requests = saved.filter(record => record?.type === 'plugin:progress-check/request').map(record => record.data)
     const responses = saved.filter(record => record?.type === 'plugin:progress-check/response').map(record => record.data)
@@ -298,19 +316,24 @@ describe('running-session progress checks', () => {
       const { signal: _signal, ...sent } = f.adapter.checks[index]!
       expect(request.request).toEqual(sent)
       expect(request.prepared).toBe(true)
-      expect(request.request.messages.slice(0, -1)).toEqual(f.adapter.main.at(-1)!.messages)
+      expect(request.request.messages.slice(0, -1)).toEqual(f.agent.session.deriveMessages())
     }
     expect(requests[1]?.request.messages.at(-1)).toMatchSnapshot()
   })
 
-  it('stops after three format retries and retains the watermark for the next interval', async () => {
-    const f = await started()
+  it('stops after three format retries on turn end and retains the watermark for the next interval', async () => {
+    const f = await started(5, { refreshOnTurnEnd: true })
     f.adapter.answer = textChunks('not JSON')
-    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(false)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/failure', 4)
+    await vi.advanceTimersByTimeAsync(0)
     expect(f.adapter.checks).toHaveLength(4)
     expect(f.events.filter(event => event.type === 'plugin:progress-check/failure')).toHaveLength(4)
     expect(f.events.some(event => readResult(event) !== undefined)).toBe(false)
     f.adapter.answer = textChunks(JSON.stringify(modelReport))
+    f.adapter.toolRounds = 10
+    f.adapter.release = deferred(); f.adapter.ready = deferred()
+    f.start(); await f.adapter.ready.promise
     await vi.advanceTimersByTimeAsync(59999)
     expect(f.adapter.checks).toHaveLength(4)
     await vi.advanceTimersByTimeAsync(1)
@@ -319,24 +342,44 @@ describe('running-session progress checks', () => {
   })
 
   it('cancels between attempts without sending another request', async () => {
-    const f = await started()
+    const f = await started(1, { refreshOnTurnEnd: true })
     f.adapter.answer = textChunks('not JSON')
-    const controller = new AbortController()
+    let disposed = false
     f.ctx.on('session/event', (_session, event) => {
-      if (event.type === 'plugin:progress-check/failure') controller.abort()
+      if (!disposed && event.type === 'plugin:progress-check/failure') {
+        disposed = true
+        void f.plugin.dispose()
+      }
     })
-    expect((await f.ctx.progressCheck.generate(f.agent.session.id, controller.signal)).ok).toBe(false)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/failure', 1)
+    await vi.advanceTimersByTimeAsync(0)
     expect(f.adapter.checks).toHaveLength(1)
     expect(f.adapter.activeChecks).toBe(0)
   })
 
   it('can disable immediate format retries while keeping the failed response', async () => {
-    const f = await started(5, { maxParseRetries: 0 })
+    const f = await started(1, { maxParseRetries: 0, refreshOnTurnEnd: true })
     f.adapter.answer = textChunks('not JSON')
-    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(false)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/failure', 1)
+    await vi.advanceTimersByTimeAsync(0)
     expect(f.adapter.checks).toHaveLength(1)
     const saved = (await f.handle.read()).events.map(pluginRecordOf)
     expect(saved.find(record => record?.type === 'plugin:progress-check/response')?.data.text).toBe('not JSON')
+  })
+
+  it('does not retry format errors on mid-turn periodic or manual checks', async () => {
+    const f = await started(5)
+    f.adapter.answer = textChunks('not JSON')
+    await vi.advanceTimersByTimeAsync(60000)
+    await f.waitRecords('plugin:progress-check/failure', 1)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(f.adapter.checks).toHaveLength(1)
+    expect((await f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)).ok).toBe(false)
+    expect(f.adapter.checks).toHaveLength(2)
+    const failures = (await f.handle.read()).events.map(pluginRecordOf).filter(record => record?.type === 'plugin:progress-check/failure')
+    expect(failures.map(record => record?.data.retryable)).toEqual([false, false])
   })
 
   it('keeps partial output and the provider error without retrying a failed stream', async () => {
@@ -370,13 +413,14 @@ describe('running-session progress checks', () => {
   })
 
   it('shares one timeout across retries and drains the interrupted attempt', async () => {
-    const f = await started()
+    const f = await started(1, { refreshOnTurnEnd: true })
     f.adapter.answers = [textChunks('not JSON')]
     f.adapter.checkHolds.set(2, deferred())
-    const operation = f.ctx.progressCheck.generate(f.agent.session.id, new AbortController().signal)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
     await f.adapter.waitForChecks(2)
     await vi.advanceTimersByTimeAsync(120000)
-    expect((await operation).ok).toBe(false)
+    await f.waitRecords('plugin:progress-check/failure', 2)
+    await vi.advanceTimersByTimeAsync(0)
     expect(f.adapter.checks).toHaveLength(2)
     expect(f.adapter.activeChecks).toBe(0)
     const failures = (await f.handle.read()).events.map(pluginRecordOf).filter(record => record?.type === 'plugin:progress-check/failure')
@@ -477,6 +521,73 @@ describe('running-session progress checks', () => {
     await f.waitRecords('plugin:progress-check/result')
     expect(f.adapter.checks).toHaveLength(1)
     expect(f.adapter.checks[0]?.messages.filter(message => message.role === 'tool')).toHaveLength(5)
+  })
+
+  it('refreshes progress automatically at turn end with the final assistant reply, even below interval thresholds', async () => {
+    const f = await started(1, { refreshOnTurnEnd: true })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(f.adapter.checks).toHaveLength(0)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(1)
+    const sent = f.adapter.checks[0]!
+    expect(sent.messages.at(-2)).toMatchObject({ role: 'assistant', content: [{ type: 'text', text: 'Main task finished.' }] })
+    expect(sent.messages.at(-1)?.content[0]).toMatchObject({ type: 'text', text: expect.stringContaining('Phase: turn ended') })
+    expect(readResult(f.events.find(event => readResult(event) !== undefined)!)?.coveredStepCount).toBe(2)
+  })
+
+  it('skips turn-end refresh when progress is already up to date', async () => {
+    const f = await started(1, { refreshOnTurnEnd: true })
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(1)
+    let rejectNext = true
+    f.ctx.on('agent/pre-step', (_payload, next) => rejectNext ? (rejectNext = false, Promise.resolve({ kind: 'reject' })) : next(), { global: true })
+    f.start(); await f.agent.whenIdle()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(f.adapter.checks).toHaveLength(1)
+  })
+
+  it('supersedes a stale mid-turn check on turn end and completes while idle', async () => {
+    const f = await started(5, { refreshOnTurnEnd: true })
+    const midTurn = deferred()
+    f.adapter.checkHolds.set(1, midTurn)
+    await vi.advanceTimersByTimeAsync(60000)
+    await f.adapter.waitForChecks(1)
+    expect(f.adapter.checks).toHaveLength(1)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    expect(f.adapter.checks[0]?.signal?.aborted).toBe(true)
+    await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(2)
+    expect(readResult(f.events.find(event => readResult(event) !== undefined)!)?.coveredStepCount).toBe(6)
+  })
+
+  it('holds a turn-end refresh until a page shows the Session', async () => {
+    const f = await setup({ refreshOnTurnEnd: true })
+    onTestFinished(f.close)
+    f.adapter.toolRounds = 1
+    clock(); f.start(); await f.adapter.ready.promise
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(f.adapter.checks).toHaveLength(0)
+    f.watch()
+    await f.waitRecords('plugin:progress-check/result')
+    expect(f.adapter.checks).toHaveLength(1)
+    expect(readResult(f.events.find(event => readResult(event) !== undefined)!)?.coveredStepCount).toBe(2)
+  })
+
+  it('skips turn-end refresh when no tool call occurred since the last report', async () => {
+    const f = await started(0, { refreshOnTurnEnd: true })
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(f.adapter.checks).toHaveLength(0)
+  })
+
+  it('does not refresh on turn end by default', async () => {
+    const f = await started(1)
+    f.adapter.release.resolve(); await f.agent.whenIdle()
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(f.adapter.checks).toHaveLength(0)
   })
 
 })

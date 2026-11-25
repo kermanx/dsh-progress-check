@@ -1,6 +1,7 @@
 /** Versioned, ignorable progress records; none are part of the model conversation. */
 import { z } from 'zod'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import type { SessionProjectionSummaryExcluded } from '@deepseek-ai/dsh-session-projection/types'
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { ContentBlock, FinishReason, GenerateOptions, StreamChunk, TokenUsage } from '@deepseek-ai/dsh-llm'
 
@@ -15,12 +16,30 @@ export const reportSchema = z.object({
   uncertainties: z.array(z.string().trim().min(1)),
   userActions: z.array(z.string().trim().min(1)),
 }).strict()
-/** Validate model progress lines and join them for the existing durable report format. */
+/** Validate concise progress lines (1–2 lines) and join them for the durable report format. */
 export const modelReportSchema = reportSchema.extend({
-  progress: z.array(z.string().trim().min(1)).min(2).max(3).transform(lines => lines.join('\n')),
+  progress: z.array(z.string().trim().min(1)).min(1).max(2).transform(lines => lines.join('\n')),
 })
 /** Three answers from the auxiliary model call. */
 export type Report = z.infer<typeof reportSchema>
+/** Latest session progress report projected to the client dock. */
+export const progressViewSchema = z.object({
+  id: z.string().min(1),
+  updatedAt: z.number().nonnegative(),
+  stepsAgo: z.number().int().nonnegative(),
+  needsRefresh: z.boolean(),
+  report: reportSchema,
+}).nullable()
+/** Non-null payload for one session's latest progress report. */
+export type LatestReport = NonNullable<z.infer<typeof progressViewSchema>>
+/** Client view payload for one session's latest progress report. */
+export type ProgressView = LatestReport | null
+
+declare module '@deepseek-ai/dsh-session-projection/types' {
+  interface SessionProjectionMap {
+    'progress-check': SessionProjectionSummaryExcluded<LatestReport> | null
+  }
+}
 /** Validated persisted result fields consumed by the client and cadence projection. */
 export const resultSchema = z.object({
   version: z.literal(1),

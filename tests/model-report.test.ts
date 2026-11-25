@@ -3,8 +3,8 @@ import { modelReportSchema, readResult } from '../src/records.ts'
 
 describe('model progress lines', () => {
   it.each([
-    ['正在验证保存修复。', '下一步检查恢复结果。'],
-    ['正在修复会话保存。', '正在验证旧格式读取。', '下一步检查恢复结果。'],
+    ['正在验证保存修复'],
+    ['正在验证保存修复', '下一步检查恢复结果'],
   ])('keeps the progress lines in the durable text report: %j', (...progress) => {
     expect(modelReportSchema.parse({ progress, uncertainties: [], userActions: [] }))
       .toEqual({ progress: progress.join('\n'), uncertainties: [], userActions: [] })
@@ -13,9 +13,8 @@ describe('model progress lines', () => {
   it.each([
     { progress: '旧的模型字符串格式' },
     { progress: [] },
-    { progress: ['只有当前操作。'] },
-    { progress: ['子任务。', '当前操作。', '下一步。', '多余背景。'] },
-    { progress: ['当前操作。', ' '] },
+    { progress: ['子任务', '当前操作', '下一步'] },
+    { progress: ['当前操作', ' '] },
   ])('rejects model progress that cannot fill the card: %j', ({ progress }) => {
     expect(modelReportSchema.safeParse({ progress, uncertainties: [], userActions: [] }).success).toBe(false)
   })

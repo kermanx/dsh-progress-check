@@ -103,8 +103,35 @@ export class Adapter extends LlmAdapter {
     if (!options.signal?.aborted) yield* textChunks('Main task finished.')
   }
 }
+/** A parsed configuration whose volatile references a test can move. */
+export interface LiveConfig {
+  /** Runtime configuration with one reference per field. */
+  config: Progress.Config
+  /** Move one reference's value, then emit `loader/volatile-update` on the plugin's fiber. */
+  set: <K extends keyof Progress.ConfigValues>(key: K, value: Progress.ConfigValues[K]) => void
+}
+
+/**
+ * Build a configuration whose volatile fields a test owns. The schema supplies
+ * every default; each field is read back once and wrapped in a live reference.
+ * @param overrides - plain values to start from.
+ * @returns the configuration and a setter that never touches its references' objects.
+ */
+export function liveConfig(overrides: Partial<Progress.ConfigValues> = {}): LiveConfig {
+  const parsed = Progress.Config(overrides)
+  const values = new Map<keyof Progress.ConfigValues, unknown>(
+    (Object.keys(parsed) as (keyof Progress.ConfigValues)[])
+      .map(key => [key, (parsed[key] as { get(): unknown }).get()]),
+  )
+  return {
+    config: Object.fromEntries((Object.keys(parsed) as (keyof Progress.ConfigValues)[])
+      .map(key => [key, { get: () => values.get(key) }])) as Progress.Config,
+    set: (key, value) => { values.set(key, value) },
+  }
+}
+
 export async function setup(
-  config: Partial<Progress.Config> = {}, adapter = new Adapter(), options: { rpc?: boolean } = {},
+  config: Partial<Progress.ConfigValues> = {}, adapter = new Adapter(), options: { rpc?: boolean; live?: LiveConfig } = {},
 ) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-progress-test-'))
   const ctx = new Context()
@@ -131,7 +158,11 @@ export async function setup(
       new Request(new URL(input, 'http://127.0.0.1/'), init), connection.browserPeer,
     ))
   }
-  const plugin = await ctx.plugin(Progress, { ...Progress.Config({}), ...config })
+  // A live configuration is mounted through a thin wrapper: Cordis would
+  // re-parse (and re-wrap) references passed as ordinary plugin config.
+  const plugin = options.live === undefined
+    ? await ctx.plugin(Progress, config)
+    : await ctx.plugin({ inject: Progress.inject, apply: (scope: Context) => Progress.apply(scope, options.live!.config) })
   const harness = await mountAgentLoopTestHarness(ctx)
   const agent = await harness.create(SessionId('progress-test'), { provider: 'mock', model: 'fixture', reasoningEffort: ReasoningEffortId('high'), maxTokens: 2000 })
   const handle = await ctx.sessionPersistence.open(agent.session.id, 'read')
@@ -165,6 +196,11 @@ export async function setup(
     })
   }
   /**
+   * Announce a committed volatile configuration change, as Loader does on the
+   * owning plugin's fiber.
+   */
+  const volatileUpdate = () => { plugin.ctx.emit('loader/volatile-update', []) }
+  /**
    * Call through the real Connection registry and browser RPC framing.
    * @param endpoint - channel endpoint name.
    * @param payload - untrusted request payload.
@@ -174,5 +210,5 @@ export async function setup(
     if (rpc === undefined) throw new Error('the fixture Connection was not enabled')
     return rpc.call(PROGRESS_CHANNEL, `progress-check/${endpoint}`, payload)
   }
-  return { ctx, root, agent, adapter, events, plugin, start, close, handle, waitRecords, harness, watch, callRpc }
+  return { ctx, root, agent, adapter, events, plugin, start, close, handle, waitRecords, harness, watch, callRpc, volatileUpdate }
 }
